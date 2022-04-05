@@ -1,0 +1,308 @@
+import casadi as ca
+import numpy as np
+import pandas as pd
+import openap
+import openap.casadi as oc
+
+from openap.extra.aero import ft, kts, fpm
+from math import pi
+
+from .base import BaseOptimizer
+from .cruise import CruiseOptimizer
+
+
+class ClimbOptimizer(BaseOptimizer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.curise_optimizor = CruiseOptimizer(*args, **kwargs)
+
+    def init_conditions(self, df_cruise):
+        """Initialize direct collocation bounds and guesses."""
+
+        # Convert lat/lon to cartisian coordinates.
+        xp_0, yp_0 = self.proj(self.lon1, self.lat1)
+        xp_f, yp_f = self.proj(self.lon2, self.lat2)
+        x_min = min(xp_0, xp_f) - 10_000
+        x_max = max(xp_0, xp_f) + 10_000
+        y_min = min(yp_0, yp_f) - 10_000
+        y_max = max(yp_0, yp_f) + 10_000
+        od_bearing = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
+        od_psi = od_bearing * pi / 180
+
+        mass_0 = self.initial_mass
+        mass_oew = self.aircraft["limits"]["OEW"]
+        h_min = 0
+        h_toc = df_cruise.h.iloc[0]
+        cruise_mach = df_cruise.mach.iloc[0]
+        self.traj_range = self.wrap.climb_range()["maximum"] * 1000 * 1.5
+
+        # Initial conditions - Lower and upper bounds
+        self.x_0_lb = self.x_0_ub = [xp_0, yp_0, h_min, mass_0]
+
+        # Final conditions - Lower and upper bounds
+        self.x_f_lb = [x_min, y_min, h_toc, mass_oew]
+        self.x_f_ub = [x_max, y_max, h_toc + 500, mass_0]
+
+        # States - Lower and upper bounds
+        self.x_lb = [x_min, y_min, h_min, mass_oew]
+        self.x_ub = [x_max, y_max, h_toc, mass_0]
+
+        # States - guesses
+        xp_g = xp_0 + np.linspace(0, self.traj_range * np.sin(od_psi), self.nodes + 1)
+        yp_g = yp_0 + np.linspace(0, self.traj_range * np.cos(od_psi), self.nodes + 1)
+        h_g = np.linspace(h_min, h_toc, self.nodes + 1)
+        m_g = mass_0 * np.ones(self.nodes + 1)
+        self.x_guess = np.vstack([xp_g, yp_g, h_g, m_g]).T
+
+        # Control init - lower and upper bounds
+        self.u_0_lb = [0.2, 1000 * fpm, -pi]
+        self.u_0_ub = [0.3, 2500 * fpm, 3 * pi]
+
+        # Control final - lower and upper bounds
+        self.u_f_lb = [cruise_mach, 0, -pi]
+        self.u_f_ub = [cruise_mach, 0, 3 * pi]
+
+        # Control - Lower and upper bound
+        self.u_lb = [0.2, 0, -pi]
+        self.u_ub = [cruise_mach, 2500 * fpm, 3 * pi]
+
+        # Control - guesses
+        self.u_guess = [0.2, 1500 * fpm, od_psi]
+
+    def trajectory(self, objective="fuel", df_cruise=None, **kwargs) -> pd.DataFrame:
+
+        if df_cruise is None:
+            print("Finding the optimal cruise trajectoy parameters...")
+            df_cruise = self.curise_optimizor.trajectory(objective)
+            df_cruise.to_csv("tmp/cruise.csv")
+
+        print("Optimizing climbing trajectory...")
+
+        ipopt_print = kwargs.get("ipopt_print", 0)
+        print_time = kwargs.get("print_time", 0)
+
+        self.init_model(objective)
+        self.init_conditions(df_cruise)
+
+        C, D, B = self.collocation_coeff()
+
+        # Start with an empty NLP
+        w = []  # Containing all the states & controls generated
+        w0 = []  # Containing the initial guess for w
+        lbw = []  # Lower bound constraints on the w variable
+        ubw = []  # Upper bound constraints on the w variable
+        J = 0  # Objective function
+        g = []  # Constraint function
+        lbg = []  # Constraint lb value
+        ubg = []  # Constraint ub value
+
+        # For plotting x and u given w
+        X = []
+        U = []
+
+        # Apply initial conditions
+        # Create Xk such that it is the same length as x
+        nstates = self.x.shape[0]
+        Xk = ca.MX.sym("X0", nstates, self.x.shape[1])
+        w.append(Xk)
+        lbw.append(self.x_0_lb)
+        ubw.append(self.x_0_ub)
+        w0.append(self.x_guess[0])
+        X.append(Xk)
+
+        # Formulate the NLP
+        for k in range(self.nodes):
+            # New NLP variable for the control
+            Uk = ca.MX.sym("U_" + str(k), self.u.shape[0])
+            U.append(Uk)
+            w.append(Uk)
+            if k == 0:
+                lbw.append(self.u_0_lb)
+                ubw.append(self.u_0_ub)
+                w0.append(self.u_guess)
+            elif k == self.nodes - 1:
+                lbw.append(self.u_f_lb)
+                ubw.append(self.u_f_ub)
+                w0.append(self.u_guess)
+            else:
+                lbw.append(self.u_lb)
+                ubw.append(self.u_ub)
+                w0.append(self.u_guess)
+
+            # State at collocation points
+            Xc = []
+            for j in range(self.polydeg):
+                Xkj = ca.MX.sym("X_" + str(k) + "_" + str(j), nstates)
+                Xc.append(Xkj)
+                w.append(Xkj)
+                lbw.append(self.x_lb)
+                ubw.append(self.x_ub)
+                w0.append(self.x_guess[k])
+
+            # Loop over collocation points
+            Xk_end = D[0] * Xk
+            for j in range(1, self.polydeg + 1):
+                # Expression for the state derivative at the collocation point
+                xpc = C[0, j] * Xk
+                for r in range(self.polydeg):
+                    xpc = xpc + C[r + 1, j] * Xc[r]
+
+                # Append collocation equations
+                fj, qj = self.f(Xc[j - 1], Uk)
+                g.append(self.dt * fj - xpc)
+                lbg.append([0] * nstates)
+                ubg.append([0] * nstates)
+
+                # Add contribution to the end state
+                Xk_end = Xk_end + D[j] * Xc[j - 1]
+
+                # Add contribution to quadrature function
+                # J = J + B[j] * qj * dt
+                J = J + B[j] * qj
+
+            # New NLP variable for state at end of interval
+            Xk = ca.MX.sym("X_" + str(k + 1), nstates)
+            w.append(Xk)
+            X.append(Xk)
+
+            if k < self.nodes - 1:
+                # normal boundary conditions
+                lbw.append(self.x_lb)
+                ubw.append(self.x_ub)
+            else:
+                # Final bounday conditions
+                lbw.append(self.x_f_lb)
+                ubw.append(self.x_f_ub)
+
+            w0.append(self.x_guess[k])
+
+            # Add equality constraint
+            g.append(Xk_end - Xk)
+            lbg.append([0] * nstates)
+            ubg.append([0] * nstates)
+
+        w.append(self.ts_final)
+        lbw.append([0])
+        ubw.append([ca.inf])
+        w0.append([3600])
+
+        # smooth Mach number changes
+        for k in range(1, self.nodes):
+            g.append(U[k][0] - U[k - 1][0])
+            lbg.append([-0.05])
+            ubg.append([0.05])  # to be tunned
+
+        # total energy model
+        for k in range(self.nodes - 1):
+            hk = X[k][2]
+            hk1 = X[k + 1][2]
+            vs = U[k][1]
+            vk = oc.aero.mach2tas(U[k][0], hk)
+            vk1 = oc.aero.mach2tas(U[k + 1][0], hk1)
+            pa = ca.arctan2(vs, vk) * 180 / pi
+            dvdt = (vk1 - vk) / self.dt
+            dhdt = (hk1 - hk) / self.dt
+            thrust_max = self.thrust.climb(vk / kts, hk / ft, vs / fpm)
+            drag = self.drag.clean(X[k][3], vk / kts, hk / ft, pa)
+            g.append((thrust_max - drag) / X[k][3] - oc.aero.g0 / vk * dhdt - dvdt)
+            lbg.append([0])
+            ubg.append([ca.inf])
+
+        # smooth vertical rate changes
+        for k in range(1, self.nodes):
+            g.append(U[k][1] - U[k - 1][1])
+            lbg.append([-2])
+            ubg.append([2])  # to be tunned
+
+        # smooth heading changes
+        for k in range(1, self.nodes - 1):
+            g.append(U[k][2] - U[k - 1][2])
+            lbg.append([-5 * pi / 180])
+            ubg.append([5 * pi / 180])
+
+        # final position should be along the cruise trajectory
+        xp_0, yp_0 = self.proj(self.lon1, self.lat1)
+        xp_f, yp_f = self.proj(self.lon2, self.lat2)
+
+        g.append((yp_f - yp_0) / (xp_f - xp_0) - (X[-1][1] - yp_0) / (X[-1][0] - xp_0))
+        lbg.append([0])
+        ubg.append([0])
+
+        # total fix range should be
+        g.append(ca.sqrt((X[-1][0] - xp_0) ** 2 + (X[-1][1] - yp_0) ** 2))
+        lbg.append([self.traj_range])
+        ubg.append([self.traj_range])
+
+        # Concatenate vectors
+        w = ca.vertcat(*w)
+        g = ca.vertcat(*g)
+        X = ca.horzcat(*X)
+        U = ca.horzcat(*U)
+        w0 = np.concatenate(w0)
+        lbw = np.concatenate(lbw)
+        ubw = np.concatenate(ubw)
+        lbg = np.concatenate(lbg)
+        ubg = np.concatenate(ubg)
+
+        # Create an NLP solver
+        nlp = {"f": J, "x": w, "g": g}
+
+        opts = {
+            "ipopt.print_level": ipopt_print,
+            "ipopt.sb": "yes",
+            "print_time": print_time,
+            "ipopt.max_iter": 1000,
+        }
+        solver = ca.nlpsol("solver", "ipopt", nlp, opts)
+
+        solution = solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
+
+        # final timestep
+        ts_final = solution["x"][-1].full()[0][0]
+
+        # Function to get x and u from w
+        output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
+        x_opt, u_opt = output(solution["x"])
+
+        X = x_opt.full()[:, 1:]
+        U = u_opt.full()[:, :]
+        n = self.nodes
+        # U = np.append(U, U[:, -1:], axis=1)
+
+        xp, yp, h, mass = X
+        mach, vs, psi = U
+
+        lon, lat = self.proj(xp, yp, inverse=True)
+
+        df = (
+            pd.DataFrame()
+            .assign(ts=np.linspace(0, ts_final, n).round())
+            .assign(xp=xp)
+            .assign(yp=yp)
+            .assign(h=h)
+            .assign(lat=lat)
+            .assign(lon=lon)
+            .assign(alt=(h / ft).round())
+            .assign(mach=mach.round(4))
+            .assign(tas=openap.aero.mach2tas(mach, h).round(2))
+            .assign(vs=(vs / fpm).round())
+            .assign(heading=(np.rad2deg(psi) % 360).round(2))
+            .assign(mass=mass.round())
+        )
+
+        if self.wind:
+            wu = self.wind.calc_u(xp, yp, h)
+            wv = self.wind.calc_v(xp, yp, h)
+            df = df.assign(wu=wu, wv=wv)
+
+        func_objs = []
+        for func in dir(self):
+            if ("obj_fuel" in func) or ("obj_gwp" in func) or ("obj_gtp" in func):
+                func_objs.append(func)
+
+        dt = ts_final / self.nodes
+
+        for fo in func_objs:
+            df[fo] = getattr(self, fo)(X, U, dt, symbolic=False)
+
+        return df
