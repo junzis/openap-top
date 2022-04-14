@@ -7,14 +7,14 @@ import openap.casadi as oc
 from openap.extra.aero import ft, kts, fpm
 from math import pi
 
-from .base import BaseOptimizer
-from .cruise import CruiseOptimizer
+from .base import Base
+from .cruise import Cruise
 
 
-class ClimbOptimizer(BaseOptimizer):
+class Climb(Base):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.curise_optimizor = CruiseOptimizer(*args, **kwargs)
+        self.cruise = Cruise(*args, **kwargs)
 
     def init_conditions(self, df_cruise):
         """Initialize direct collocation bounds and guesses."""
@@ -31,7 +31,7 @@ class ClimbOptimizer(BaseOptimizer):
 
         mass_0 = self.initial_mass
         mass_oew = self.aircraft["limits"]["OEW"]
-        h_min = 0
+        h_min = 3000 * ft
         h_toc = df_cruise.h.iloc[0]
         cruise_mach = df_cruise.mach.iloc[0]
         self.traj_range = self.wrap.climb_range()["maximum"] * 1000 * 1.5
@@ -41,7 +41,7 @@ class ClimbOptimizer(BaseOptimizer):
 
         # Final conditions - Lower and upper bounds
         self.x_f_lb = [x_min, y_min, h_toc, mass_oew]
-        self.x_f_ub = [x_max, y_max, h_toc + 500, mass_0]
+        self.x_f_ub = [x_max, y_max, h_toc + 1000, mass_0]
 
         # States - Lower and upper bounds
         self.x_lb = [x_min, y_min, h_min, mass_oew]
@@ -55,31 +55,36 @@ class ClimbOptimizer(BaseOptimizer):
         self.x_guess = np.vstack([xp_g, yp_g, h_g, m_g]).T
 
         # Control init - lower and upper bounds
-        self.u_0_lb = [0.2, 1000 * fpm, -pi]
-        self.u_0_ub = [0.3, 2500 * fpm, 3 * pi]
+        self.u_0_lb = [0.1, 0 * fpm, -pi]
+        self.u_0_ub = [0.4, 2500 * fpm, 3 * pi]
 
         # Control final - lower and upper bounds
         self.u_f_lb = [cruise_mach, 0, -pi]
         self.u_f_ub = [cruise_mach, 0, 3 * pi]
 
         # Control - Lower and upper bound
-        self.u_lb = [0.2, 0, -pi]
+        self.u_lb = [0.1, 0 * fpm, -pi]
         self.u_ub = [cruise_mach, 2500 * fpm, 3 * pi]
 
         # Control - guesses
         self.u_guess = [0.2, 1500 * fpm, od_psi]
 
-    def trajectory(self, objective="fuel", df_cruise=None, **kwargs) -> pd.DataFrame:
+    def trajectory(self, objective="fuel", df_cruise=None) -> pd.DataFrame:
+
+        if self.debug:
+            ipopt_print = 5
+            print_time = 1
+        else:
+            ipopt_print = 0
+            print_time = 0
 
         if df_cruise is None:
-            print("Finding the optimal cruise trajectoy parameters...")
-            df_cruise = self.curise_optimizor.trajectory(objective)
-            df_cruise.to_csv("tmp/cruise.csv")
+            if self.debug:
+                print("Finding the preliminary optimal cruise trajectory parameters...")
+            df_cruise = self.cruise.trajectory(objective)
 
-        print("Optimizing climbing trajectory...")
-
-        ipopt_print = kwargs.get("ipopt_print", 0)
-        print_time = kwargs.get("print_time", 0)
+        if self.debug:
+            print("Calculating optimal climbing trajectory...")
 
         self.init_model(objective)
         self.init_conditions(df_cruise)
@@ -190,7 +195,7 @@ class ClimbOptimizer(BaseOptimizer):
         for k in range(1, self.nodes):
             g.append(U[k][0] - U[k - 1][0])
             lbg.append([-0.05])
-            ubg.append([0.05])  # to be tunned
+            ubg.append([0.05])
 
         # total energy model
         for k in range(self.nodes - 1):
@@ -211,8 +216,8 @@ class ClimbOptimizer(BaseOptimizer):
         # smooth vertical rate changes
         for k in range(1, self.nodes):
             g.append(U[k][1] - U[k - 1][1])
-            lbg.append([-2])
-            ubg.append([2])  # to be tunned
+            lbg.append([-500 * fpm])
+            ubg.append([500 * fpm])
 
         # smooth heading changes
         for k in range(1, self.nodes - 1):
@@ -221,14 +226,14 @@ class ClimbOptimizer(BaseOptimizer):
             ubg.append([5 * pi / 180])
 
         # final position should be along the cruise trajectory
-        xp_0, yp_0 = self.proj(self.lon1, self.lat1)
-        xp_f, yp_f = self.proj(self.lon2, self.lat2)
-
-        g.append((yp_f - yp_0) / (xp_f - xp_0) - (X[-1][1] - yp_0) / (X[-1][0] - xp_0))
+        xp_1, yp_1 = df_cruise.xp.iloc[0], df_cruise.yp.iloc[0]
+        xp_2, yp_2 = df_cruise.xp.iloc[1], df_cruise.yp.iloc[1]
+        g.append((yp_2 - yp_1) / (xp_2 - xp_1) - (X[-1][1] - yp_1) / (X[-1][0] - xp_1))
         lbg.append([0])
         ubg.append([0])
 
-        # total fix range should be
+        # fixed range
+        xp_0, yp_0 = self.proj(self.lon1, self.lat1)
         g.append(ca.sqrt((X[-1][0] - xp_0) ** 2 + (X[-1][1] - yp_0) ** 2))
         lbg.append([self.traj_range])
         ubg.append([self.traj_range])
@@ -264,45 +269,6 @@ class ClimbOptimizer(BaseOptimizer):
         output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
         x_opt, u_opt = output(solution["x"])
 
-        X = x_opt.full()[:, 1:]
-        U = u_opt.full()[:, :]
-        n = self.nodes
-        # U = np.append(U, U[:, -1:], axis=1)
-
-        xp, yp, h, mass = X
-        mach, vs, psi = U
-
-        lon, lat = self.proj(xp, yp, inverse=True)
-
-        df = (
-            pd.DataFrame()
-            .assign(ts=np.linspace(0, ts_final, n).round())
-            .assign(xp=xp)
-            .assign(yp=yp)
-            .assign(h=h)
-            .assign(lat=lat)
-            .assign(lon=lon)
-            .assign(alt=(h / ft).round())
-            .assign(mach=mach.round(4))
-            .assign(tas=openap.aero.mach2tas(mach, h).round(2))
-            .assign(vs=(vs / fpm).round())
-            .assign(heading=(np.rad2deg(psi) % 360).round(2))
-            .assign(mass=mass.round())
-        )
-
-        if self.wind:
-            wu = self.wind.calc_u(xp, yp, h)
-            wv = self.wind.calc_v(xp, yp, h)
-            df = df.assign(wu=wu, wv=wv)
-
-        func_objs = []
-        for func in dir(self):
-            if ("obj_fuel" in func) or ("obj_gwp" in func) or ("obj_gtp" in func):
-                func_objs.append(func)
-
-        dt = ts_final / self.nodes
-
-        for fo in func_objs:
-            df[fo] = getattr(self, fo)(X, U, dt, symbolic=False)
+        df = self.to_trajectory(ts_final, x_opt, u_opt)
 
         return df

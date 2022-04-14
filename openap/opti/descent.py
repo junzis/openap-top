@@ -4,25 +4,24 @@ import pandas as pd
 import openap
 import openap.casadi as oc
 
-from .base import BaseOptimizer
-from .cruise import CruiseOptimizer
+from .base import Base
+from .cruise import Cruise
 
 from openap.extra.aero import ft, kts, fpm
 from math import pi
 
 
-class DescentOptimizer(BaseOptimizer):
+class Descent(Base):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.curise_optimizor = CruiseOptimizer(*args, **kwargs)
+        self.curise = Cruise(*args, **kwargs)
 
     def init_conditions(self, df_cruise):
         """Initialize direct collocation bounds and guesses."""
 
-        h_min = 0
+        h_min = 3000 * ft
         h_tod = df_cruise.h.iloc[-1]
         psi_tod = df_cruise.heading.iloc[-1] * pi / 180
-        self.traj_range = h_tod / np.tan(np.radians(3))
         od_bearing = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
         od_psi = od_bearing * pi / 180
 
@@ -51,8 +50,9 @@ class DescentOptimizer(BaseOptimizer):
         self.x_ub = [x_max, y_max, h_tod, mass_tod]
 
         # States - guesses
-        xp_g = xp_f - np.linspace(self.traj_range * np.sin(od_psi), 0, self.nodes + 1)
-        yp_g = yp_f - np.linspace(self.traj_range * np.cos(od_psi), 0, self.nodes + 1)
+        dist = h_tod / np.tan(np.radians(3))  # 3 deg
+        xp_g = xp_f - np.linspace(dist * np.sin(od_psi), 0, self.nodes + 1)
+        yp_g = yp_f - np.linspace(dist * np.cos(od_psi), 0, self.nodes + 1)
         h_g = np.linspace(h_tod, h_min, self.nodes + 1)
         # h_g = h_tod * np.ones(self.nodes + 1)
         m_g = mass_tod * np.ones(self.nodes + 1)
@@ -63,27 +63,32 @@ class DescentOptimizer(BaseOptimizer):
         self.u_0_ub = [cruise_mach, 0, psi_tod]
 
         # Control final - lower and upper bounds
-        self.u_f_lb = [0.05, -500 * fpm, od_psi]
-        self.u_f_ub = [0.1, 0 * fpm, od_psi]
+        self.u_f_lb = [0.1, -1000 * fpm, od_psi]
+        self.u_f_ub = [0.3, 0 * fpm, od_psi]
 
         # Control - Lower and upper bound
-        self.u_lb = [0.05, -2000 * fpm, -pi]
+        self.u_lb = [0.1, -2000 * fpm, -pi]
         self.u_ub = [cruise_mach, 0, 3 * pi]
 
         # Control - guesses
         self.u_guess = [0.7, -1500 * fpm, psi_tod]
 
-    def trajectory(self, objective="fuel", df_cruise=None, **kwargs) -> pd.DataFrame:
+    def trajectory(self, objective="fuel", df_cruise=None) -> pd.DataFrame:
+
+        if self.debug:
+            ipopt_print = 5
+            print_time = 1
+        else:
+            ipopt_print = 0
+            print_time = 0
 
         if df_cruise is None:
-            print("Finding the optimal cruise trajectoy parameters...")
-            df_cruise = self.curise_optimizor.trajectory(objective)
-            df_cruise.to_csv("tmp/cruise.csv")
+            if self.debug:
+                print("Finding the preliminary optimal cruise trajectory parameters...")
+            df_cruise = self.curise.trajectory(objective)
 
-        print("Optimizing descent trajectory...")
-
-        ipopt_print = kwargs.get("ipopt_print", 0)
-        print_time = kwargs.get("print_time", 0)
+        if self.debug:
+            print("Calculating optimal descent trajectory...")
 
         self.init_model(objective)
         self.init_conditions(df_cruise)
@@ -217,11 +222,39 @@ class DescentOptimizer(BaseOptimizer):
         #     ubg.append([np.tan(np.radians(-2))])
 
         # first position should be along the cruise trajectory
-        xp_0, yp_0 = self.proj(self.lon1, self.lat1)
-        xp_f, yp_f = self.proj(self.lon2, self.lat2)
-        g.append((yp_f - yp_0) / (xp_f - xp_0) - (yp_f - X[0][1]) / (xp_f - X[0][0]))
+        xp_1, yp_1 = df_cruise.xp.iloc[-1], df_cruise.yp.iloc[-1]
+        xp_2, yp_2 = df_cruise.xp.iloc[-2], df_cruise.yp.iloc[-2]
+        g.append((yp_1 - yp_2) / (xp_1 - xp_2) - (yp_1 - X[0][1]) / (xp_1 - X[0][0]))
         lbg.append([0])
         ubg.append([0])
+
+        # force equilibrium
+        for k in range(self.nodes - 1):
+            vs = U[k][1]
+            h = X[k][2]
+            v = oc.aero.mach2tas(U[k][0], h)
+            gamma = ca.arctan2(vs, v)
+            thrust_idle = self.thrust.descent_idle(v / kts, h / ft)
+            drag = self.drag.clean(X[k][3], v / kts, h / ft)
+            g.append(thrust_idle - X[k][3] * 9.8 * ca.sin(gamma) - drag)
+            lbg.append([-ca.inf])
+            ubg.append([0])
+
+        # total energy model
+        for k in range(self.nodes - 1):
+            hk = X[k][2]
+            hk1 = X[k + 1][2]
+            vs = U[k][1]
+            vk = oc.aero.mach2tas(U[k][0], hk)
+            vk1 = oc.aero.mach2tas(U[k + 1][0], hk1)
+            pa = ca.arctan2(vs, vk) * 180 / pi
+            dvdt = (vk1 - vk) / self.dt
+            dhdt = (hk1 - hk) / self.dt
+            thrust_idle = self.thrust.descent_idle(vk / kts, hk / ft)
+            drag = self.drag.clean(X[k][3], vk / kts, hk / ft, pa)
+            g.append((thrust_idle - drag) / X[k][3] - oc.aero.g0 / vk * dhdt - dvdt)
+            lbg.append([0])
+            ubg.append([ca.inf])
 
         # Concatenate vectors
         w = ca.vertcat(*w)
@@ -254,45 +287,6 @@ class DescentOptimizer(BaseOptimizer):
         output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
         x_opt, u_opt = output(solution["x"])
 
-        X = x_opt.full()[:, 1:]
-        U = u_opt.full()[:, :]
-        n = self.nodes
-        # U = np.append(U, U[:, -1:], axis=1)
-
-        xp, yp, h, mass = X
-        mach, vs, psi = U
-
-        lon, lat = self.proj(xp, yp, inverse=True)
-
-        df = (
-            pd.DataFrame()
-            .assign(ts=np.linspace(0, ts_final, n).round())
-            .assign(xp=xp)
-            .assign(yp=yp)
-            .assign(h=h)
-            .assign(lat=lat)
-            .assign(lon=lon)
-            .assign(alt=(h / ft).round())
-            .assign(mach=mach.round(4))
-            .assign(tas=openap.aero.mach2tas(mach, h).round(2))
-            .assign(vs=(vs / fpm).round())
-            .assign(heading=(np.rad2deg(psi) % 360).round(2))
-            .assign(mass=mass.round())
-        )
-
-        if self.wind:
-            wu = self.wind.calc_u(xp, yp, h)
-            wv = self.wind.calc_v(xp, yp, h)
-            df = df.assign(wu=wu, wv=wv)
-
-        func_objs = []
-        for func in dir(self):
-            if ("obj_fuel" in func) or ("obj_gwp" in func) or ("obj_gtp" in func):
-                func_objs.append(func)
-
-        dt = ts_final / self.nodes
-
-        for fo in func_objs:
-            df[fo] = getattr(self, fo)(X, U, dt, symbolic=False)
+        df = self.to_trajectory(ts_final, x_opt, u_opt)
 
         return df

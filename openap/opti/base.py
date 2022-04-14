@@ -12,7 +12,7 @@ from math import pi
 from . import wind
 
 
-class BaseOptimizer:
+class Base:
     def __init__(
         self,
         actype: str,
@@ -46,6 +46,8 @@ class BaseOptimizer:
         self.engine = oc.prop.engine(self.aircraft["engine"]["default"])
 
         self.initial_mass = takeoff_mass_factor * self.aircraft["limits"]["MTOW"]
+        self.oew = self.aircraft["limits"]["OEW"]
+        self.mlw = self.aircraft["limits"]["MLW"]
         self.thrust = oc.Thrust(actype)
         self.drag = oc.Drag(actype, wave_drag=True)
         self.fuelflow = oc.FuelFlow(actype)
@@ -72,6 +74,8 @@ class BaseOptimizer:
         max_range = self.wrap.cruise_range()["maximum"] * 1.2
         if self.range > max_range * 1000:
             warnings.warn(f"The destination is likely out of maximum cruise range.")
+
+        self.debug = False
 
         self.setup_dc()
 
@@ -153,7 +157,7 @@ class BaseOptimizer:
 
         return ca.vertcat(dx, dy, dh, dm)
 
-    def setup_dc(self, nodes=20, polydeg=4):
+    def setup_dc(self, nodes=20, polydeg=3):
         self.nodes = nodes
         self.polydeg = polydeg
 
@@ -252,30 +256,83 @@ class BaseOptimizer:
 
     def obj_gwp20(self, x, u, dt, **kwargs):
         co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
-        cost = co2 + 0.22 * h2o + 637 * nox - 856 * sox + 4209 * soot
+        cost = co2 + 0.22 * h2o + 619 * nox - 832 * sox + 4288 * soot
+        cost = cost * 1e-3
         return cost * dt
 
     def obj_gwp50(self, x, u, dt, **kwargs):
         co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
-        cost = co2 + 0.11 * h2o + 216 * nox - 412 * sox + 21225 * soot
+        cost = co2 + 0.1 * h2o + 205 * nox - 392 * sox + 2018 * soot
+        cost = cost * 1e-3
         return cost * dt
 
     def obj_gwp100(self, x, u, dt, **kwargs):
         co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
-        cost = co2 + 0.06 * h2o + 122 * nox - 243 * sox + 1252 * soot
+        cost = co2 + 0.06 * h2o + 114 * nox - 226 * sox + 1166 * soot
+        cost = cost * 1e-3
         return cost * dt
 
     def obj_gtp20(self, x, u, dt, **kwargs):
         co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
-        cost = co2 + 0.07 * h2o - 420 * nox - 90 * sox + 466 * soot
+        cost = co2 + 0.07 * h2o - 222 * nox - 241 * sox + 1245 * soot
+        cost = cost * 1e-3
         return cost * dt
 
     def obj_gtp50(self, x, u, dt, **kwargs):
         co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
-        cost = co2 + 0.01 * h2o - 18 * nox - 70 * sox + 360 * soot
+        cost = co2 + 0.01 * h2o - 69 * nox - 38 * sox + 195 * soot
+        cost = cost * 1e-3
         return cost * dt
 
     def obj_gtp100(self, x, u, dt, **kwargs):
         co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
-        cost = co2 + 0.009 * h2o + 22 * nox - 55 * sox + 284 * soot
+        cost = co2 + 0.008 * h2o + 13 * nox - 31 * sox + 161 * soot
+        cost = cost * 1e-3
         return cost * dt
+
+    def to_trajectory(self, ts_final, x_opt, u_opt):
+        X = x_opt.full()
+        U = u_opt.full()
+
+        U2 = U[:, -2:-1]
+        U1 = U[:, -1:]
+        Uf = U1 + (U1 - U2)
+        U = np.append(U, Uf, axis=1)
+        n = self.nodes + 1
+
+        xp, yp, h, mass = X
+        mach, vs, psi = U
+        lon, lat = self.proj(xp, yp, inverse=True)
+
+        df = (
+            pd.DataFrame()
+            .assign(ts=np.linspace(0, ts_final, n).round())
+            .assign(xp=xp)
+            .assign(yp=yp)
+            .assign(h=h)
+            .assign(lat=lat)
+            .assign(lon=lon)
+            .assign(alt=(h / ft).round())
+            .assign(mach=mach.round(4))
+            .assign(tas=openap.aero.mach2tas(mach, h).round(2))
+            .assign(vs=(vs / fpm).round())
+            .assign(heading=(np.rad2deg(psi) % 360).round(2))
+            .assign(mass=mass.round())
+        )
+
+        if self.wind:
+            wu = self.wind.calc_u(xp, yp, h)
+            wv = self.wind.calc_v(xp, yp, h)
+            df = df.assign(wu=wu, wv=wv)
+
+        func_objs = []
+        for func in dir(self):
+            if ("obj_fuel" in func) or ("obj_gwp" in func) or ("obj_gtp" in func):
+                func_objs.append(func)
+
+        dt = ts_final / self.nodes
+
+        for fo in func_objs:
+            df[fo.replace("obj_", "")] = getattr(self, fo)(X, U, dt, symbolic=False)
+
+        return df

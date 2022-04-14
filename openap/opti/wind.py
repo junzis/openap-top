@@ -11,13 +11,16 @@ def read_grib(fgrib):
     df = (
         cfgrib.open_dataset(
             fgrib,
-            backend_kwargs={"filter_by_keys": {"typeOfLevel": "isobaricInhPa"}},
+            backend_kwargs={
+                "filter_by_keys": {"typeOfLevel": "isobaricInhPa"},
+                "indexpath": "",
+            },
         )
         .to_dataframe()
         .reset_index()
         .assign(longitude=lambda d: d.longitude - 180)
         .assign(h=lambda d: aero.h_isa(d.isobaricInhPa * 100))
-    )[["latitude", "longitude", "h", "u", "v"]]
+    )
     return df
 
 

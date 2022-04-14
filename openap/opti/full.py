@@ -1,0 +1,375 @@
+import casadi as ca
+import numpy as np
+import pandas as pd
+import openap
+import openap.casadi as oc
+
+from openap.extra.aero import ft, kts, fpm
+from math import pi
+
+from .base import Base
+from .cruise import Cruise
+from .climb import Climb
+from .descent import Descent
+from . import wind
+
+
+class CompleteFlight(Base):
+    def init_conditions(self):
+        """Initialize direct collocation bounds and guesses."""
+
+        # Convert lat/lon to cartisian coordinates.
+        xp_0, yp_0 = self.proj(self.lon1, self.lat1)
+        xp_f, yp_f = self.proj(self.lon2, self.lat2)
+        x_min = min(xp_0, xp_f) - 10_000
+        x_max = max(xp_0, xp_f) + 10_000
+        y_min = min(yp_0, yp_f) - 10_000
+        y_max = max(yp_0, yp_f) + 10_000
+
+        mach_max = self.aircraft["limits"]["MMO"]
+        mass_oew = self.aircraft["limits"]["OEW"]
+        h_max = self.aircraft["limits"]["ceiling"]
+        h_min = 1500 * ft
+        hdg = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
+        psi = hdg * pi / 180
+        mass_init = self.initial_mass
+
+        # Initial conditions - Lower upper bounds
+        self.x_0_lb = [xp_0, yp_0, h_min, mass_init]
+        self.x_0_ub = [xp_0, yp_0, h_min, mass_init]
+
+        # Final conditions - Lower and upper bounds
+        self.x_f_lb = [xp_f, yp_f, h_min, mass_oew]
+        self.x_f_ub = [xp_f, yp_f, h_min, mass_init]
+
+        # States - Lower and upper bounds
+        self.x_lb = [x_min, y_min, h_min, mass_oew]
+        self.x_ub = [x_max, y_max, h_max, mass_init]
+
+        # Initial guess - states
+        xp_g = np.linspace(xp_0, xp_f, self.nodes + 1)
+        yp_g = np.linspace(yp_0, yp_f, self.nodes + 1)
+        h_g = h_max * np.ones(self.nodes + 1)
+        m_g = mass_init * np.ones(self.nodes + 1)
+        self.x_guess = np.vstack([xp_g, yp_g, h_g, m_g]).T
+
+        # Control init - lower and upper bounds
+        self.u_0_lb = [0.1, 0 * fpm, psi]
+        self.u_0_ub = [0.3, 2500 * fpm, psi]
+
+        # Control final - lower and upper bounds
+        self.u_f_lb = [0.1, -1500 * fpm, psi]
+        self.u_f_ub = [0.3, 0 * fpm, psi]
+
+        # Control - Lower and upper bound
+        self.u_lb = [0.1, -2500 * fpm, -pi]
+        self.u_ub = [mach_max, 2500 * fpm, 3 * pi]
+
+        # Control - guesses
+        self.u_guess = [0.6, 1000 * fpm, psi]
+
+    def trajectory(self, objective="fuel") -> pd.DataFrame:
+
+        if self.debug:
+            print("Calculating complete global optimal trajectory...")
+            ipopt_print = 5
+            print_time = 1
+        else:
+            ipopt_print = 0
+            print_time = 0
+
+        self.init_model(objective)
+        self.init_conditions()
+
+        C, D, B = self.collocation_coeff()
+
+        # Start with an empty NLP
+        w = []  # Containing all the states & controls generated
+        w0 = []  # Containing the initial guess for w
+        lbw = []  # Lower bound constraints on the w variable
+        ubw = []  # Upper bound constraints on the w variable
+        J = 0  # Objective function
+        g = []  # Constraint function
+        lbg = []  # Constraint lb value
+        ubg = []  # Constraint ub value
+
+        # For plotting x and u given w
+        X = []
+        U = []
+
+        # Apply initial conditions
+        # Create Xk such that it is the same length as x
+        nstates = self.x.shape[0]
+        Xk = ca.MX.sym("X0", nstates, self.x.shape[1])
+        w.append(Xk)
+        lbw.append(self.x_0_lb)
+        ubw.append(self.x_0_ub)
+        w0.append(self.x_guess[0])
+        X.append(Xk)
+
+        # Formulate the NLP
+        for k in range(self.nodes):
+            # New NLP variable for the control
+            Uk = ca.MX.sym("U_" + str(k), self.u.shape[0])
+            U.append(Uk)
+            w.append(Uk)
+            if k == 0:
+                lbw.append(self.u_0_lb)
+                ubw.append(self.u_0_ub)
+                w0.append(self.u_guess)
+            elif k == self.nodes:
+                lbw.append(self.u_f_lb)
+                ubw.append(self.u_f_ub)
+                w0.append(self.u_guess)
+            else:
+                lbw.append(self.u_lb)
+                ubw.append(self.u_ub)
+                w0.append(self.u_guess)
+
+            # State at collocation points
+            Xc = []
+            for j in range(self.polydeg):
+                Xkj = ca.MX.sym("X_" + str(k) + "_" + str(j), nstates)
+                Xc.append(Xkj)
+                w.append(Xkj)
+                lbw.append(self.x_lb)
+                ubw.append(self.x_ub)
+                w0.append(self.x_guess[k])
+
+            # Loop over collocation points
+            Xk_end = D[0] * Xk
+            for j in range(1, self.polydeg + 1):
+                # Expression for the state derivative at the collocation point
+                xpc = C[0, j] * Xk
+                for r in range(self.polydeg):
+                    xpc = xpc + C[r + 1, j] * Xc[r]
+
+                # Append collocation equations
+                fj, qj = self.f(Xc[j - 1], Uk)
+                g.append(self.dt * fj - xpc)
+                lbg.append([0] * nstates)
+                ubg.append([0] * nstates)
+
+                # Add contribution to the end state
+                Xk_end = Xk_end + D[j] * Xc[j - 1]
+
+                # Add contribution to quadrature function
+                # J = J + B[j] * qj * dt
+                J = J + B[j] * qj
+
+            # New NLP variable for state at end of interval
+            Xk = ca.MX.sym("X_" + str(k + 1), nstates)
+            w.append(Xk)
+            X.append(Xk)
+
+            if k < self.nodes - 1:
+                lbw.append(self.x_lb)
+                ubw.append(self.x_ub)
+            else:
+                # Final conditions
+                lbw.append(self.x_f_lb)
+                ubw.append(self.x_f_ub)
+
+            w0.append(self.x_guess[k])
+
+            # Add equality constraint
+            g.append(Xk_end - Xk)
+            lbg.append([0] * nstates)
+            ubg.append([0] * nstates)
+
+        w.append(self.ts_final)
+        lbw.append([0])
+        ubw.append([ca.inf])
+        w0.append([self.range * 1000 / 200])
+
+        # constrain altitude during cruise
+        dd = self.range / (self.nodes + 1)
+        max_climb_range = self.wrap.climb_range()["maximum"] * 1000
+        max_descent_range = self.wrap.descent_range()["maximum"] * 1000
+        for k in range(
+            int(max_climb_range / dd), int((self.range - max_descent_range) / dd)
+        ):
+            # if (k * dd > max_climb_range) or (k * dd < self.range - max_descent_range):
+            g.append(U[k][1])
+            lbg.append([-500 * fpm])
+            ubg.append([500 * fpm])
+
+        # total energy model
+        for k in range(self.nodes - 1):
+            hk = X[k][2]
+            hk1 = X[k + 1][2]
+            vs = U[k][1]
+            vk = oc.aero.mach2tas(U[k][0], hk)
+            vk1 = oc.aero.mach2tas(U[k + 1][0], hk1)
+            pa = ca.arctan2(vs, vk) * 180 / pi
+            dvdt = (vk1 - vk) / self.dt
+            dhdt = (hk1 - hk) / self.dt
+            thrust_max = self.thrust.climb(vk / kts, hk / ft, vs / fpm)
+            drag = self.drag.clean(X[k][3], vk / kts, hk / ft, pa)
+            g.append((thrust_max - drag) / X[k][3] - oc.aero.g0 / vk * dhdt - dvdt)
+            lbg.append([0])
+            ubg.append([ca.inf])
+
+        # aircraft performane constraints
+        for k in range(1, self.nodes):
+            # max_thrust > drag
+            v = oc.aero.mach2tas(U[k][0], X[k][2])
+            tas = v / kts
+            alt = X[k][2] / ft
+            g.append(self.thrust.cruise(tas, alt) - self.drag.clean(X[k][3], tas, alt))
+            lbg.append([0])
+            ubg.append([ca.inf])
+
+            # max lift > weight
+            rho = oc.aero.density(X[k][2])
+            S = self.aircraft["wing"]["area"]
+            g.append(1.4 * 0.5 * rho * v ** 2 * S - X[k][3] * oc.aero.g0)
+            lbg.append([0])
+            ubg.append([ca.inf])
+
+        # final mass larger than OEW
+        g.append(X[-1][3] - self.oew)
+        lbg.append([0])
+        ubg.append([self.mlw])
+
+        # smooth Mach number change
+        for k in range(1, self.nodes):
+            g.append(U[k][0] - U[k - 1][0])
+            lbg.append([-0.2])
+            ubg.append([0.2])  # to be tunned
+
+        # smooth vertical rate change
+        for k in range(1, self.nodes):
+            g.append(U[k][1] - U[k - 1][1])
+            lbg.append([-1000 * fpm])
+            ubg.append([1000 * fpm])  # to be tunned
+
+        # smooth heading change
+        for k in range(1, self.nodes):
+            g.append(U[k][2] - U[k - 1][2])
+            lbg.append([-15 * pi / 180])
+            ubg.append([15 * pi / 180])
+
+        # Concatenate vectors
+        w = ca.vertcat(*w)
+        g = ca.vertcat(*g)
+        X = ca.horzcat(*X)
+        U = ca.horzcat(*U)
+        w0 = np.concatenate(w0)
+        lbw = np.concatenate(lbw)
+        ubw = np.concatenate(ubw)
+        lbg = np.concatenate(lbg)
+        ubg = np.concatenate(ubg)
+
+        # Create an NLP solver
+        nlp = {"f": J, "x": w, "g": g}
+
+        opts = {
+            "ipopt.print_level": ipopt_print,
+            "ipopt.sb": "yes",
+            "print_time": print_time,
+            "ipopt.max_iter": 2000,
+        }
+        solver = ca.nlpsol("solver", "ipopt", nlp, opts)
+        solution = solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
+
+        # final timestep
+        ts_final = solution["x"][-1].full()[0][0]
+
+        # Function to get x and u from w
+        output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
+        x_opt, u_opt = output(solution["x"])
+
+        df = self.to_trajectory(ts_final, x_opt, u_opt)
+
+        return df
+
+
+class MultiPhase(Base):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.curise = Cruise(*args, **kwargs)
+        self.climb = Climb(*args, **kwargs)
+        self.descent = Descent(*args, **kwargs)
+
+    def enable_wind(self, windfield: pd.DataFrame):
+        w = wind.PolyWind(
+            windfield, self.proj, self.lat1, self.lon1, self.lat2, self.lon2
+        )
+        self.curise.wind = w
+        self.climb.wind = w
+        self.descent.wind = w
+
+    def change_engine(self, engtype):
+        self.curise.engtype = engtype
+        self.curise.engine = oc.prop.engine(engtype)
+        self.curise.thrust = oc.Thrust(self.actype, engtype)
+        self.curise.fuelflow = oc.FuelFlow(self.actype, engtype)
+        self.curise.emission = oc.Emission(self.actype, engtype)
+
+        self.climb.engtype = engtype
+        self.climb.engine = oc.prop.engine(engtype)
+        self.climb.thrust = oc.Thrust(self.actype, engtype)
+        self.climb.fuelflow = oc.FuelFlow(self.actype, engtype)
+        self.climb.emission = oc.Emission(self.actype, engtype)
+
+        self.descent.engtype = engtype
+        self.descent.engine = oc.prop.engine(engtype)
+        self.descent.thrust = oc.Thrust(self.actype, engtype)
+        self.descent.fuelflow = oc.FuelFlow(self.actype, engtype)
+        self.descent.emission = oc.Emission(self.actype, engtype)
+
+    def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
+
+        if self.debug:
+            print("Finding the preliminary optimal cruise trajectory parameters...")
+
+        dfcr = self.curise.trajectory(objective, **kwargs)
+
+        # climb
+        if self.debug:
+            print("Finding optimal climb trajectory...")
+
+        dfcl = self.climb.trajectory(objective, dfcr, **kwargs)
+
+        # cruise
+        if self.debug:
+            print("Finding optimal cruise trajectory...")
+
+        self.curise.initial_mass = dfcl.mass.iloc[-1]
+        self.curise.lat1 = dfcl.lat.iloc[-1]
+        self.curise.lon1 = dfcl.lon.iloc[-1]
+        dfcr = self.curise.trajectory(objective, **kwargs)
+
+        # descent
+        if self.debug:
+            print("Finding optimal descent trajectory...")
+
+        self.descent.initial_mass = dfcr.mass.iloc[-1]
+        dfde = self.descent.trajectory(objective, dfcr, **kwargs)
+
+        # find top of descent
+        dbrg = np.array(
+            openap.aero.bearing(dfde.lat.iloc[0], dfde.lon.iloc[0], dfcr.lat, dfcr.lon)
+        )
+        ddbrg = np.abs((dbrg[1:] - dbrg[:-1]).round())
+        idx = np.where(ddbrg > 90)[0]
+        idx_tod = idx[0] if len(idx) > 0 else -1
+
+        dfcr = dfcr.iloc[:idx_tod]
+
+        # calculate time at top of climb
+        d = np.sqrt(np.sum(((dfcr.iloc[0] - dfcl.iloc[-1]) ** 2).values[1:3]))
+        v = dfcl.tas.iloc[-1] * kts
+        dt = np.round(d / v)
+        dfcr.ts = dfcl.ts.iloc[-1] + dt + dfcr.ts
+
+        # calculate time at top of descent
+        d = np.sqrt(np.sum(((dfde.iloc[0] - dfcr.iloc[-1]) ** 2).values[1:3]))
+        v = dfcr.tas.iloc[-1] * kts
+        dt = np.round(d / v)
+        dfde.ts = dfde.ts - dfde.ts.iloc[0] + dt + dfcr.ts.iloc[-1]
+
+        df_full = pd.concat([dfcl, dfcr, dfde], ignore_index=True)
+
+        return df_full

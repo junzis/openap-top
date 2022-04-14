@@ -7,10 +7,10 @@ import openap.casadi as oc
 from openap.extra.aero import ft, kts, fpm
 from math import pi
 
-from .base import BaseOptimizer
+from .base import Base
 
 
-class CruiseOptimizer(BaseOptimizer):
+class Cruise(Base):
     def fix_mach_number(self):
         self.fix_mach = True
 
@@ -52,8 +52,8 @@ class CruiseOptimizer(BaseOptimizer):
         self.x_ub = [x_max, y_max, h_max, mass_toc]
 
         # Control - Lower and upper bound
-        self.u_lb = [0.5, -1000 * fpm, -pi]
-        self.u_ub = [mach_max, 1000 * fpm, 3 * pi]
+        self.u_lb = [0.5, -500 * fpm, -pi]
+        self.u_ub = [mach_max, 500 * fpm, 3 * pi]
 
         # Initial guess - states
         xp_g = np.linspace(xp_0, xp_f, self.nodes + 1)
@@ -66,10 +66,15 @@ class CruiseOptimizer(BaseOptimizer):
         hdg = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
         self.u_guess = [0.7, 0, hdg * pi / 180]
 
-    def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
+    def trajectory(self, objective="fuel") -> pd.DataFrame:
 
-        ipopt_print = kwargs.get("ipopt_print", 0)
-        print_time = kwargs.get("print_time", 0)
+        if self.debug:
+            print("Calculating optimal cruise trajectory...")
+            ipopt_print = 5
+            print_time = 1
+        else:
+            ipopt_print = 0
+            print_time = 0
 
         self.init_model(objective)
         self.init_conditions()
@@ -195,8 +200,8 @@ class CruiseOptimizer(BaseOptimizer):
         # smooth vertical rate change
         for k in range(1, self.nodes):
             g.append(U[k][1] - U[k - 1][1])
-            lbg.append([-2])
-            ubg.append([2])  # to be tunned
+            lbg.append([-500 * fpm])
+            ubg.append([500 * fpm])  # to be tunned
 
         # smooth heading change
         for k in range(1, self.nodes):
@@ -259,44 +264,6 @@ class CruiseOptimizer(BaseOptimizer):
         output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
         x_opt, u_opt = output(solution["x"])
 
-        X = x_opt.full()[:, 1:-1]
-        U = u_opt.full()[:, 1:-1]
-        U = np.append(U, U[:, -1:], axis=1)
-
-        xp, yp, h, mass = X
-        mach, vs, psi = U
-
-        lon, lat = self.proj(xp, yp, inverse=True)
-
-        df = (
-            pd.DataFrame()
-            .assign(ts=np.linspace(0, ts_final, self.nodes - 1).round())
-            .assign(xp=xp)
-            .assign(yp=yp)
-            .assign(h=h)
-            .assign(lat=lat)
-            .assign(lon=lon)
-            .assign(alt=(h / openap.aero.ft).round())
-            .assign(mach=mach.round(4))
-            .assign(tas=openap.aero.mach2tas(mach, h).round(2))
-            .assign(vs=(vs / openap.aero.fpm).round())
-            .assign(heading=(np.rad2deg(psi) % 360).round(2))
-            .assign(mass=mass.round())
-        )
-
-        if self.wind:
-            wu = self.wind.calc_u(xp, yp, h)
-            wv = self.wind.calc_v(xp, yp, h)
-            df = df.assign(wu=wu, wv=wv)
-
-        func_objs = []
-        for func in dir(self):
-            if ("obj_fuel" in func) or ("obj_gwp" in func) or ("obj_gtp" in func):
-                func_objs.append(func)
-
-        dt = ts_final / self.nodes
-
-        for fo in func_objs:
-            df[fo] = getattr(self, fo)(X, U, dt, symbolic=False)
+        df = self.to_trajectory(ts_final, x_opt, u_opt)
 
         return df
