@@ -274,18 +274,18 @@ class Descent(Base):
             "ipopt.print_level": ipopt_print,
             "ipopt.sb": "yes",
             "print_time": print_time,
-            "ipopt.max_iter": 1000,
+            "ipopt.max_iter": self.ipopt_max_iter,
         }
-        solver = ca.nlpsol("solver", "ipopt", nlp, opts)
+        self.solver = ca.nlpsol("solver", "ipopt", nlp, opts)
 
-        solution = solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
+        self.solution = self.solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
 
         # final timestep
-        ts_final = solution["x"][-1].full()[0][0]
+        ts_final = self.solution["x"][-1].full()[0][0]
 
         # Function to get x and u from w
         output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
-        x_opt, u_opt = output(solution["x"])
+        x_opt, u_opt = output(self.solution["x"])
 
         df = self.to_trajectory(ts_final, x_opt, u_opt)
 

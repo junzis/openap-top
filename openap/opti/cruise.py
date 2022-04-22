@@ -11,6 +11,14 @@ from .base import Base
 
 
 class Cruise(Base):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.fix_mach = False
+        self.fix_alt = False
+        self.fix_track = False
+        self.allow_descent = False
+
     def fix_mach_number(self):
         self.fix_mach = True
 
@@ -180,7 +188,11 @@ class Cruise(Base):
             v = oc.aero.mach2tas(U[k][0], X[k][2])
             tas = v / kts
             alt = X[k][2] / ft
-            g.append(self.thrust.cruise(tas, alt) - self.drag.clean(X[k][3], tas, alt))
+
+            # max thrut at given tas, important
+            Tmax = self.thrust.cruise(tas, alt)
+
+            g.append(Tmax - self.drag.clean(X[k][3], tas, alt))
             lbg.append([0])
             ubg.append([ca.inf])
 
@@ -252,17 +264,17 @@ class Cruise(Base):
             "ipopt.print_level": ipopt_print,
             "ipopt.sb": "yes",
             "print_time": print_time,
-            "ipopt.max_iter": 1000,
+            "ipopt.max_iter": self.ipopt_max_iter,
         }
-        solver = ca.nlpsol("solver", "ipopt", nlp, opts)
-        solution = solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
+        self.solver = ca.nlpsol("solver", "ipopt", nlp, opts)
+        self.solution = self.solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
 
         # final timestep
-        ts_final = solution["x"][-1].full()[0][0]
+        ts_final = self.solution["x"][-1].full()[0][0]
 
         # Function to get x and u from w
         output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
-        x_opt, u_opt = output(solution["x"])
+        x_opt, u_opt = output(self.solution["x"])
 
         df = self.to_trajectory(ts_final, x_opt, u_opt)
 

@@ -54,12 +54,12 @@ class CompleteFlight(Base):
         self.x_guess = np.vstack([xp_g, yp_g, h_g, m_g]).T
 
         # Control init - lower and upper bounds
-        self.u_0_lb = [0.1, 0 * fpm, psi]
+        self.u_0_lb = [0.1, 500 * fpm, psi]
         self.u_0_ub = [0.3, 2500 * fpm, psi]
 
         # Control final - lower and upper bounds
         self.u_f_lb = [0.1, -1500 * fpm, psi]
-        self.u_f_ub = [0.3, 0 * fpm, psi]
+        self.u_f_ub = [0.3, -300 * fpm, psi]
 
         # Control - Lower and upper bound
         self.u_lb = [0.1, -2500 * fpm, -pi]
@@ -117,7 +117,7 @@ class CompleteFlight(Base):
                 lbw.append(self.u_0_lb)
                 ubw.append(self.u_0_ub)
                 w0.append(self.u_guess)
-            elif k == self.nodes:
+            elif k == self.nodes - 1:
                 lbw.append(self.u_f_lb)
                 ubw.append(self.u_f_ub)
                 w0.append(self.u_guess)
@@ -180,19 +180,35 @@ class CompleteFlight(Base):
         w.append(self.ts_final)
         lbw.append([0])
         ubw.append([ca.inf])
-        w0.append([self.range * 1000 / 200])
+        w0.append([7200])
 
         # constrain altitude during cruise
         dd = self.range / (self.nodes + 1)
-        max_climb_range = self.wrap.climb_range()["maximum"] * 1000
-        max_descent_range = self.wrap.descent_range()["maximum"] * 1000
-        for k in range(
-            int(max_climb_range / dd), int((self.range - max_descent_range) / dd)
-        ):
-            # if (k * dd > max_climb_range) or (k * dd < self.range - max_descent_range):
+        max_climb_range = 500_000
+        max_descent_range = 500_000
+        idx_toc = int(max_climb_range / dd)
+        idx_tod = int((self.range - max_descent_range) / dd)
+
+        for k in range(idx_toc, idx_tod):
+            # minimum avoid large changes in altitude
             g.append(U[k][1])
             lbg.append([-500 * fpm])
             ubg.append([500 * fpm])
+
+            # minimum cruise alt FL150
+            g.append(X[k][2])
+            lbg.append([15000 * ft])
+            ubg.append([ca.inf])
+
+        for k in range(0, idx_toc):
+            g.append(U[k][1])
+            lbg.append([0])
+            ubg.append([ca.inf])
+
+        for k in range(idx_tod, self.nodes):
+            g.append(U[k][1])
+            lbg.append([-ca.inf])
+            ubg.append([0])
 
         # total energy model
         for k in range(self.nodes - 1):
@@ -201,11 +217,10 @@ class CompleteFlight(Base):
             vs = U[k][1]
             vk = oc.aero.mach2tas(U[k][0], hk)
             vk1 = oc.aero.mach2tas(U[k + 1][0], hk1)
-            pa = ca.arctan2(vs, vk) * 180 / pi
             dvdt = (vk1 - vk) / self.dt
             dhdt = (hk1 - hk) / self.dt
-            thrust_max = self.thrust.climb(vk / kts, hk / ft, vs / fpm)
-            drag = self.drag.clean(X[k][3], vk / kts, hk / ft, pa)
+            thrust_max = self.thrust.climb(0, hk / ft, 0)
+            drag = self.drag.clean(X[k][3], vk / kts, hk / ft)
             g.append((thrust_max - drag) / X[k][3] - oc.aero.g0 / vk * dhdt - dvdt)
             lbg.append([0])
             ubg.append([ca.inf])
@@ -216,7 +231,7 @@ class CompleteFlight(Base):
             v = oc.aero.mach2tas(U[k][0], X[k][2])
             tas = v / kts
             alt = X[k][2] / ft
-            g.append(self.thrust.cruise(tas, alt) - self.drag.clean(X[k][3], tas, alt))
+            g.append(self.thrust.cruise(0, alt) - self.drag.clean(X[k][3], tas, alt))
             lbg.append([0])
             ubg.append([ca.inf])
 
@@ -241,8 +256,8 @@ class CompleteFlight(Base):
         # smooth vertical rate change
         for k in range(1, self.nodes):
             g.append(U[k][1] - U[k - 1][1])
-            lbg.append([-1000 * fpm])
-            ubg.append([1000 * fpm])  # to be tunned
+            lbg.append([-500 * fpm])
+            ubg.append([500 * fpm])  # to be tunned
 
         # smooth heading change
         for k in range(1, self.nodes):
@@ -265,20 +280,20 @@ class CompleteFlight(Base):
         nlp = {"f": J, "x": w, "g": g}
 
         opts = {
+            "print_time": print_time,
             "ipopt.print_level": ipopt_print,
             "ipopt.sb": "yes",
-            "print_time": print_time,
-            "ipopt.max_iter": 2000,
+            "ipopt.max_iter": self.ipopt_max_iter,
         }
-        solver = ca.nlpsol("solver", "ipopt", nlp, opts)
-        solution = solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
+        self.solver = ca.nlpsol("solver", "ipopt", nlp, opts)
+        self.solution = self.solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
 
         # final timestep
-        ts_final = solution["x"][-1].full()[0][0]
+        ts_final = self.solution["x"][-1].full()[0][0]
 
         # Function to get x and u from w
         output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
-        x_opt, u_opt = output(solution["x"])
+        x_opt, u_opt = output(self.solution["x"])
 
         df = self.to_trajectory(ts_final, x_opt, u_opt)
 

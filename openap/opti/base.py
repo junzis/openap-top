@@ -64,10 +64,6 @@ class Base:
         )
 
         self.wind = None
-        self.fix_mach = False
-        self.fix_alt = False
-        self.fix_track = False
-        self.allow_descent = False
 
         # Check cruise range
         self.range = oc.aero.distance(self.lat1, self.lon1, self.lat2, self.lon2)
@@ -76,6 +72,8 @@ class Base:
             warnings.warn(f"The destination is likely out of maximum cruise range.")
 
         self.debug = False
+
+        self.ipopt_max_iter = 1000
 
         self.setup_dc()
 

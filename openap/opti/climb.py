@@ -204,11 +204,10 @@ class Climb(Base):
             vs = U[k][1]
             vk = oc.aero.mach2tas(U[k][0], hk)
             vk1 = oc.aero.mach2tas(U[k + 1][0], hk1)
-            pa = ca.arctan2(vs, vk) * 180 / pi
             dvdt = (vk1 - vk) / self.dt
             dhdt = (hk1 - hk) / self.dt
-            thrust_max = self.thrust.climb(vk / kts, hk / ft, vs / fpm)
-            drag = self.drag.clean(X[k][3], vk / kts, hk / ft, pa)
+            thrust_max = self.thrust.climb(0, hk / ft, 0)
+            drag = self.drag.clean(X[k][3], vk / kts, hk / ft)
             g.append((thrust_max - drag) / X[k][3] - oc.aero.g0 / vk * dhdt - dvdt)
             lbg.append([0])
             ubg.append([ca.inf])
@@ -256,18 +255,18 @@ class Climb(Base):
             "ipopt.print_level": ipopt_print,
             "ipopt.sb": "yes",
             "print_time": print_time,
-            "ipopt.max_iter": 1000,
+            "ipopt.max_iter": self.ipopt_max_iter,
         }
-        solver = ca.nlpsol("solver", "ipopt", nlp, opts)
+        self.solver = ca.nlpsol("solver", "ipopt", nlp, opts)
 
-        solution = solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
+        self.solution = self.solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
 
         # final timestep
-        ts_final = solution["x"][-1].full()[0][0]
+        ts_final = self.solution["x"][-1].full()[0][0]
 
         # Function to get x and u from w
         output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
-        x_opt, u_opt = output(solution["x"])
+        x_opt, u_opt = output(self.solution["x"])
 
         df = self.to_trajectory(ts_final, x_opt, u_opt)
 
