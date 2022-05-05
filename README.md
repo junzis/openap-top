@@ -21,7 +21,12 @@ pip install --upgrade openap-opti
 Examples:
 
 ```python
-from openap.opti import CruiseOptimizer
-cro = CruiseOptimizer("A320", "EHAM", "LEMD", takeoff_mass_factor=0.8)
-df = cro.trajectory(objective="ci:10")
+from openap import opti
+
+optimizer = opti.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
+
+flight = optimizer.trajectory(objective="fuel")
+flight = optimizer.trajectory(objective="ci:30")
+flight = optimizer.trajectory(objective="gwp100")
+flight = optimizer.trajectory(objective="gtp100")
 ```

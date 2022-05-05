@@ -319,19 +319,19 @@ class MultiPhase(Base):
         self.curise.engtype = engtype
         self.curise.engine = oc.prop.engine(engtype)
         self.curise.thrust = oc.Thrust(self.actype, engtype)
-        self.curise.fuelflow = oc.FuelFlow(self.actype, engtype)
+        self.curise.fuelflow = oc.FuelFlow(self.actype, engtype, polydeg=2)
         self.curise.emission = oc.Emission(self.actype, engtype)
 
         self.climb.engtype = engtype
         self.climb.engine = oc.prop.engine(engtype)
         self.climb.thrust = oc.Thrust(self.actype, engtype)
-        self.climb.fuelflow = oc.FuelFlow(self.actype, engtype)
+        self.climb.fuelflow = oc.FuelFlow(self.actype, engtype, polydeg=2)
         self.climb.emission = oc.Emission(self.actype, engtype)
 
         self.descent.engtype = engtype
         self.descent.engine = oc.prop.engine(engtype)
         self.descent.thrust = oc.Thrust(self.actype, engtype)
-        self.descent.fuelflow = oc.FuelFlow(self.actype, engtype)
+        self.descent.fuelflow = oc.FuelFlow(self.actype, engtype, polydeg=2)
         self.descent.emission = oc.Emission(self.actype, engtype)
 
     def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
@@ -371,19 +371,16 @@ class MultiPhase(Base):
         idx = np.where(ddbrg > 90)[0]
         idx_tod = idx[0] if len(idx) > 0 else -1
 
-        dfcr = dfcr.iloc[:idx_tod]
+        dfcr = dfcr.iloc[: idx_tod + 1]
 
-        # calculate time at top of climb
-        d = np.sqrt(np.sum(((dfcr.iloc[0] - dfcl.iloc[-1]) ** 2).values[1:3]))
-        v = dfcl.tas.iloc[-1] * kts
-        dt = np.round(d / v)
-        dfcr.ts = dfcl.ts.iloc[-1] + dt + dfcr.ts
+        # time at top of climb
+        dfcr.ts = dfcl.ts.iloc[-1] + dfcr.ts
 
-        # calculate time at top of descent
+        # time at top of descent, considering the distant between last point in cruise and tod
         d = np.sqrt(np.sum(((dfde.iloc[0] - dfcr.iloc[-1]) ** 2).values[1:3]))
         v = dfcr.tas.iloc[-1] * kts
         dt = np.round(d / v)
-        dfde.ts = dfde.ts - dfde.ts.iloc[0] + dt + dfcr.ts.iloc[-1]
+        dfde.ts = dfcr.ts.iloc[-1] + dt + dfde.ts
 
         df_full = pd.concat([dfcl, dfcr, dfde], ignore_index=True)
 

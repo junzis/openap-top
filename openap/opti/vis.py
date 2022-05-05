@@ -75,6 +75,7 @@ def trajectory_on_map(df, windfield=None, ax=None, wind_sample=4):
         color="tab:green",
         transform=ccrs.Geodetic(),
         linewidth=3,
+        marker="o",
         label="Optimal",
     )
 

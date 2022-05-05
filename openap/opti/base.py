@@ -18,7 +18,8 @@ class Base:
         actype: str,
         origin: Union[str, tuple],
         destination: Union[str, tuple],
-        takeoff_mass_factor: float = 0.8,
+        m0: float = 0.8,
+        use_synonym=False,
     ):
         """OpenAP trajectory optimizer.
 
@@ -26,7 +27,7 @@ class Base:
             actype (str): ICAO aircraft type code
             origin (Union[str, tuple]): ICAO or IATA code of airport, or tuple (lat, lon)
             destination (Union[str, tuple]): ICAO or IATA code of airport, or tuple (lat, lon)
-            takeoff_mass_factor (float, optional): Takeoff mass factor. Defaults to 0.8 (of MTOW).
+            m0 (float, optional): Takeoff mass factor. Defaults to 0.8 (of MTOW).
         """
         if isinstance(origin, str):
             ap1 = openap.nav.airport(origin)
@@ -45,12 +46,15 @@ class Base:
         self.engtype = self.aircraft["engine"]["default"]
         self.engine = oc.prop.engine(self.aircraft["engine"]["default"])
 
-        self.initial_mass = takeoff_mass_factor * self.aircraft["limits"]["MTOW"]
+        self.initial_mass = m0 * self.aircraft["limits"]["MTOW"]
         self.oew = self.aircraft["limits"]["OEW"]
         self.mlw = self.aircraft["limits"]["MLW"]
+
+        self.use_synonym = use_synonym
+
         self.thrust = oc.Thrust(actype)
         self.drag = oc.Drag(actype, wave_drag=True)
-        self.fuelflow = oc.FuelFlow(actype)
+        self.fuelflow = oc.FuelFlow(actype, polydeg=2)
         self.emission = oc.Emission(actype)
         self.wrap = openap.WRAP(actype)
 
@@ -86,7 +90,7 @@ class Base:
         self.engtype = engtype
         self.engine = oc.prop.engine(engtype)
         self.thrust = oc.Thrust(self.actype, engtype)
-        self.fuelflow = oc.FuelFlow(self.actype, engtype)
+        self.fuelflow = oc.FuelFlow(self.actype, engtype, polydeg=2)
         self.emission = oc.Emission(self.actype, engtype)
 
     def collocation_coeff(self):
@@ -205,7 +209,7 @@ class Base:
             v = oc.aero.mach2tas(mach, h)
             pa = ca.atan2(vs, v) * 180 / pi
         else:
-            fuelflow = openap.FuelFlow(self.actype, self.engtype)
+            fuelflow = openap.FuelFlow(self.actype, self.engtype, polydeg=2)
             emission = openap.Emission(self.actype, self.engtype)
             v = openap.aero.mach2tas(mach, h)
             pa = np.arctan2(vs, v) * 180 / pi
@@ -228,7 +232,7 @@ class Base:
             v = oc.aero.mach2tas(mach, h)
             pa = ca.atan2(vs, v) * 180 / pi
         else:
-            fuelflow = openap.FuelFlow(self.actype, self.engtype)
+            fuelflow = openap.FuelFlow(self.actype, self.engtype, polydeg=2)
             v = openap.aero.mach2tas(mach, h)
             pa = np.arctan2(vs, v) * 180 / pi
 

@@ -27,7 +27,7 @@ with open(path.join(here, "README.md"), encoding="utf-8") as f:
 
 setup(
     name="openap-opti",
-    version="0.1",
+    version="1.0",
     description="OpenAP Trajectory Optimizer",
     long_description=long_description,
     long_description_content_type="text/markdown",
