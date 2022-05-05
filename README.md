@@ -7,13 +7,13 @@ This repository contains the flight trajectory optimizer module of [OpenAP](http
 Install the development branch from GitHub:
 
 ```sh
-pip install --upgrade git+https://github.com/junzis/openap-opti
+pip install --upgrade git+https://github.com/junzis/openap-top
 ```
 
 Install the latest stable release from pypi:
 
 ```sh
-pip install --upgrade openap-opti
+pip install --upgrade openap-top
 ```
 
 ## Quick start
@@ -21,9 +21,9 @@ pip install --upgrade openap-opti
 Examples:
 
 ```python
-from openap import opti
+from openap import top
 
-optimizer = opti.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
+optimizer = top.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
 
 flight = optimizer.trajectory(objective="fuel")
 flight = optimizer.trajectory(objective="ci:30")
