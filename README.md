@@ -30,3 +30,7 @@ flight = optimizer.trajectory(objective="ci:30")
 flight = optimizer.trajectory(objective="gwp100")
 flight = optimizer.trajectory(objective="gtp100")
 ```
+
+An optimal flight example:
+
+![example_optimal_flight](./docs/_static/optimal_flight_complete_example.png)
