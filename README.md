@@ -25,6 +25,10 @@ import openap.top as otop
 
 optimizer = otop.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
 
+fgrib = "era5_2021-05-01_0800.grib"
+windfield = top.wind.read_grib(fgrib)
+op.enable_wind(windfield)
+
 flight = optimizer.trajectory(objective="fuel")
 flight = optimizer.trajectory(objective="ci:30")
 flight = optimizer.trajectory(objective="gwp100")
