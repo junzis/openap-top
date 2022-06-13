@@ -1,10 +1,9 @@
 import cfgrib
 import pandas as pd
-from openap import aero, nav
-from pyproj import Proj
+from openap import aero
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import PolynomialFeatures
-from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.linear_model import Ridge
 
 
 def read_grib(fgrib):
@@ -18,7 +17,7 @@ def read_grib(fgrib):
         )
         .to_dataframe()
         .reset_index()
-        .assign(longitude=lambda d: d.longitude - 180)
+        .assign(longitude=lambda d: (d.longitude + 180) % 360 - 180)
         .assign(h=lambda d: aero.h_isa(d.isobaricInhPa * 100))
     )
     return df

@@ -316,7 +316,7 @@ class Base:
             .assign(lon=lon)
             .assign(alt=(h / ft).round())
             .assign(mach=mach.round(4))
-            .assign(tas=openap.aero.mach2tas(mach, h).round(2))
+            .assign(tas=(openap.aero.mach2tas(mach, h) / kts).round(2))
             .assign(vs=(vs / fpm).round())
             .assign(heading=(np.rad2deg(psi) % 360).round(2))
             .assign(mass=mass.round())
