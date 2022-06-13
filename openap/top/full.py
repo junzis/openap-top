@@ -11,7 +11,11 @@ from .base import Base
 from .cruise import Cruise
 from .climb import Climb
 from .descent import Descent
-from . import wind
+
+try:
+    from . import wind
+except:
+    RuntimeWarning("cfgrib and sklearn are required for wind integration")
 
 
 class CompleteFlight(Base):
