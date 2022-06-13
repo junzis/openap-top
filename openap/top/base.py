@@ -9,7 +9,10 @@ import openap.casadi as oc
 from openap.extra.aero import ft, kts, fpm
 from math import pi
 
-from . import wind
+try:
+    from . import wind
+except:
+    RuntimeWarning("cfgrib and sklearn are required for wind integration")
 
 
 class Base:

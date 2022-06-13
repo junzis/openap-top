@@ -7,7 +7,7 @@ This repository contains the flight trajectory optimizer module of [OpenAP](http
 Install the development branch from GitHub:
 
 ```sh
-pip install --upgrade git+https://github.com/junzis/openap-otop
+pip install --upgrade git+https://github.com/junzis/openap-top
 ```
 
 Install the latest stable release from pypi:
