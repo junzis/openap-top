@@ -295,7 +295,7 @@ class Base:
         cost = cost * 1e-3
         return cost * dt
 
-    def to_trajectory(self, ts_final, x_opt, u_opt):
+    def to_trajectory(self, ts_final, x_opt, u_opt, climate_metrics=False):
         X = x_opt.full()
         U = u_opt.full()
 
@@ -332,7 +332,10 @@ class Base:
 
         func_objs = []
         for func in dir(self):
-            if ("obj_fuel" in func) or ("obj_gwp" in func) or ("obj_gtp" in func):
+            if "obj_fuel" in func:
+                func_objs.append(func)
+
+            if climate_metrics and (("obj_gwp" in func) or ("obj_gtp" in func)):
                 func_objs.append(func)
 
         dt = ts_final / self.nodes
