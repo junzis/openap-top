@@ -162,7 +162,7 @@ class Base:
 
         return ca.vertcat(dx, dy, dh, dm)
 
-    def setup_dc(self, nodes=20, polydeg=3):
+    def setup_dc(self, nodes=40, polydeg=3):
         self.nodes = nodes
         self.polydeg = polydeg
 
