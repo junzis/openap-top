@@ -189,33 +189,34 @@ class CompleteFlight(Base):
         ubw.append([ca.inf])
         w0.append([7200])
 
-        # # constrain altitude during cruise
-        # dd = self.range / (self.nodes + 1)
-        # max_climb_range = 500_000
-        # max_descent_range = 500_000
-        # idx_toc = int(max_climb_range / dd)
-        # idx_tod = int((self.range - max_descent_range) / dd)
+        # constrain altitude during cruise for long cruise flights
+        if self.range > 1500_000:
+            dd = self.range / (self.nodes + 1)
+            max_climb_range = 500_000
+            max_descent_range = 500_000
+            idx_toc = int(max_climb_range / dd)
+            idx_tod = int((self.range - max_descent_range) / dd)
 
-        # for k in range(idx_toc, idx_tod):
-        #     # minimum avoid large changes in altitude
-        #     g.append(U[k][1])
-        #     lbg.append([-500 * fpm])
-        #     ubg.append([500 * fpm])
+            for k in range(idx_toc, idx_tod):
+                # minimum avoid large changes in altitude
+                g.append(U[k][1])
+                lbg.append([-500 * fpm])
+                ubg.append([500 * fpm])
 
-        #     # minimum cruise alt FL150
-        #     g.append(X[k][2])
-        #     lbg.append([15000 * ft])
-        #     ubg.append([ca.inf])
+                # minimum cruise alt FL150
+                g.append(X[k][2])
+                lbg.append([15000 * ft])
+                ubg.append([ca.inf])
 
-        # for k in range(0, idx_toc):
-        #     g.append(U[k][1])
-        #     lbg.append([0])
-        #     ubg.append([ca.inf])
+            for k in range(0, idx_toc):
+                g.append(U[k][1])
+                lbg.append([0])
+                ubg.append([ca.inf])
 
-        # for k in range(idx_tod, self.nodes):
-        #     g.append(U[k][1])
-        #     lbg.append([-ca.inf])
-        #     ubg.append([0])
+            for k in range(idx_tod, self.nodes):
+                g.append(U[k][1])
+                lbg.append([-ca.inf])
+                ubg.append([0])
 
         # total energy model
         for k in range(self.nodes - 1):
