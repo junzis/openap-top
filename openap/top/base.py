@@ -45,7 +45,7 @@ class Base:
             self.lat2, self.lon2 = destination
 
         self.actype = actype
-        self.aircraft = oc.prop.aircraft(self.actype)
+        self.aircraft = oc.prop.aircraft(self.actype, use_synonym=use_synonym)
         self.engtype = self.aircraft["engine"]["default"]
         self.engine = oc.prop.engine(self.aircraft["engine"]["default"])
 
@@ -55,11 +55,11 @@ class Base:
 
         self.use_synonym = use_synonym
 
-        self.thrust = oc.Thrust(actype)
-        self.drag = oc.Drag(actype, wave_drag=True)
-        self.fuelflow = oc.FuelFlow(actype, polydeg=2)
-        self.emission = oc.Emission(actype)
-        self.wrap = openap.WRAP(actype)
+        self.thrust = oc.Thrust(actype, use_synonym=self.use_synonym)
+        self.wrap = openap.WRAP(actype, use_synonym=self.use_synonym)
+        self.drag = oc.Drag(actype, wave_drag=True, use_synonym=self.use_synonym)
+        self.fuelflow = oc.FuelFlow(actype, polydeg=2, use_synonym=self.use_synonym)
+        self.emission = oc.Emission(actype, use_synonym=self.use_synonym)
 
         self.proj = Proj(
             proj="lcc",
@@ -92,9 +92,11 @@ class Base:
     def change_engine(self, engtype):
         self.engtype = engtype
         self.engine = oc.prop.engine(engtype)
-        self.thrust = oc.Thrust(self.actype, engtype)
-        self.fuelflow = oc.FuelFlow(self.actype, engtype, polydeg=2)
-        self.emission = oc.Emission(self.actype, engtype)
+        self.thrust = oc.Thrust(self.actype, engtype, use_synonym=self.use_synonym)
+        self.fuelflow = oc.FuelFlow(
+            self.actype, engtype, polydeg=2, use_synonym=self.use_synonym
+        )
+        self.emission = oc.Emission(self.actype, engtype, use_synonym=self.use_synonym)
 
     def collocation_coeff(self):
         # Get collocation points
@@ -212,8 +214,12 @@ class Base:
             v = oc.aero.mach2tas(mach, h)
             pa = ca.atan2(vs, v) * 180 / pi
         else:
-            fuelflow = openap.FuelFlow(self.actype, self.engtype, polydeg=2)
-            emission = openap.Emission(self.actype, self.engtype)
+            fuelflow = openap.FuelFlow(
+                self.actype, self.engtype, polydeg=2, use_synonym=self.use_synonym
+            )
+            emission = openap.Emission(
+                self.actype, self.engtype, use_synonym=self.use_synonym
+            )
             v = openap.aero.mach2tas(mach, h)
             pa = np.arctan2(vs, v) * 180 / pi
 
@@ -235,7 +241,9 @@ class Base:
             v = oc.aero.mach2tas(mach, h)
             pa = ca.atan2(vs, v) * 180 / pi
         else:
-            fuelflow = openap.FuelFlow(self.actype, self.engtype, polydeg=2)
+            fuelflow = openap.FuelFlow(
+                self.actype, self.engtype, polydeg=2, use_synonym=self.use_synonym
+            )
             v = openap.aero.mach2tas(mach, h)
             pa = np.arctan2(vs, v) * 180 / pi
 
