@@ -75,7 +75,7 @@ class CompleteFlight(Base):
         # Control - guesses
         self.u_guess = [0.6, 1000 * fpm, psi]
 
-    def trajectory(self, objective="fuel") -> pd.DataFrame:
+    def trajectory(self, objective="fuel", return_failed=False) -> pd.DataFrame:
 
         if self.debug:
             print("Calculating complete global optimal trajectory...")
@@ -296,6 +296,12 @@ class CompleteFlight(Base):
         self.solver = ca.nlpsol("solver", "ipopt", nlp, opts)
         self.solution = self.solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
 
+        if not self.solver.stats()["success"]:
+            RuntimeWarning("optimzation termninated unsuccessfully")
+
+            if not return_failed:
+                df = None
+
         # final timestep
         ts_final = self.solution["x"][-1].full()[0][0]
 
@@ -304,6 +310,15 @@ class CompleteFlight(Base):
         x_opt, u_opt = output(self.solution["x"])
 
         df = self.to_trajectory(ts_final, x_opt, u_opt)
+
+        # check if the optimizer has failed due to too short flight distance
+        if df.alt.max() < 6000:
+            RuntimeWarning(
+                "optimization failed, distance may be too short for optimal flight."
+            )
+
+            if not return_failed:
+                df = None
 
         return df
 
