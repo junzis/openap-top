@@ -11,6 +11,7 @@ destination = "LGAV"
 m0 = 0.85
 
 optimizer = otop.CompleteFlight(actype, origin, destination, m0)
+optimizer = otop.MultiPhase(actype, origin, destination, m0)
 # optimizer = otop.Cruise(actype, origin, destination, m0)
 # optimizer = otop.Climb(actype, origin, destination, m0)
 # optimizer = otop.Descent(actype, origin, destination, m0)
@@ -21,6 +22,7 @@ flight = optimizer.trajectory(objective="fuel")
 # flight = optimizer.trajectory(objective="ci:30")
 # flight = optimizer.trajectory(objective="gwp100")
 # flight = optimizer.trajectory(objective="gtp100")
+# flight = optimizer.trajectory(objective=("ci:90", "ci:10", "ci:20"))  # Multiphase
 
 
 print(flight)

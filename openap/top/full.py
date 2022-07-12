@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+
 import casadi as ca
 import numpy as np
 import pandas as pd
@@ -359,16 +361,21 @@ class MultiPhase(Base):
 
     def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
 
+        if isinstance(objective, Iterable):
+            obj_cl, obj_cr, obj_de = objective
+        else:
+            obj_cl = obj_cr = obj_de = objective
+
         if self.debug:
             print("Finding the preliminary optimal cruise trajectory parameters...")
 
-        dfcr = self.curise.trajectory(objective, **kwargs)
+        dfcr = self.curise.trajectory(obj_cr, **kwargs)
 
         # climb
         if self.debug:
             print("Finding optimal climb trajectory...")
 
-        dfcl = self.climb.trajectory(objective, dfcr, **kwargs)
+        dfcl = self.climb.trajectory(obj_cl, dfcr, **kwargs)
 
         # cruise
         if self.debug:
@@ -377,14 +384,14 @@ class MultiPhase(Base):
         self.curise.initial_mass = dfcl.mass.iloc[-1]
         self.curise.lat1 = dfcl.lat.iloc[-1]
         self.curise.lon1 = dfcl.lon.iloc[-1]
-        dfcr = self.curise.trajectory(objective, **kwargs)
+        dfcr = self.curise.trajectory(obj_cr, **kwargs)
 
         # descent
         if self.debug:
             print("Finding optimal descent trajectory...")
 
         self.descent.initial_mass = dfcr.mass.iloc[-1]
-        dfde = self.descent.trajectory(objective, dfcr, **kwargs)
+        dfde = self.descent.trajectory(obj_de, dfcr, **kwargs)
 
         # find top of descent
         dbrg = np.array(
