@@ -38,7 +38,7 @@ class Base:
         else:
             self.lat1, self.lon1 = origin
 
-        if isinstance(origin, str):
+        if isinstance(destination, str):
             ap2 = openap.nav.airport(destination)
             self.lat2, self.lon2 = ap2["lat"], ap2["lon"]
         else:
