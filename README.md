@@ -19,7 +19,7 @@ conda activate openap
 ```
 3. Install dependent libraries:
 ```sh
-conda install cfgrib cartopy
+conda install -c conda-forge cfgrib cartopy
 ```
 4. Install the most recent version of `openap`:
 ```sh
