@@ -9,17 +9,17 @@ A more detailed user guide can be found on: https://openap.dev/top.
 
 OpenAP.top uses `cfgrib` for integrating wind data, `cartopy` for plotting, and a few other libraries. I recommend using `conda` to install these dependencies. Following is an example how I set it up on my computer for testing.
 
-1. Create a new conda environmental (`openap`), which avoids messing up the base conda environment:
+1. Create a new conda environment (`openap-env`), which avoids messing up the base conda environment:
 ```sh
-conda create -n openap python=3.10 -c conda-forge
+conda create -n openap-env python=3.10 -c conda-forge
 ```
-2. Use the `openap` environment
+2. Use the `openap-env` environment
 ```sh
-conda activate openap
+conda activate openap-env
 ```
 3. Install dependent libraries:
 ```sh
-conda install cfgrib cartopy
+conda install cfgrib cartopy casadi scikit-learn -c conda-forge
 ```
 4. Install the most recent version of `openap`:
 ```sh
@@ -36,9 +36,9 @@ pip install --upgrade git+https://github.com/junzis/openap-top
 Example code to generate a fuel optimal flight between two airports:
 
 ```python
-import openap.top as otop
+from openap import top
 
-optimizer = otop.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
+optimizer = top.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
 
 flight = optimizer.trajectory(objective="fuel")
 ```
@@ -62,13 +62,13 @@ Then enable the wind for the defined optimizer.
 Example code:
 
 ```python
-import openap.top as otop
+from openap import top
+from openap.top import wind
 
-optimizer = otop.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
+optimizer = top.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
 
 fgrib = "path_to_the_wind_data.grib"
-windfield = otop.wind.read_grib(fgrib)
-
+windfield = wind.read_grib(fgrib)
 optimizer.enable_wind(windfield)
 
 flight = optimizer.trajectory(objective="fuel")
