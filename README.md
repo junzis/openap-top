@@ -51,7 +51,9 @@ flight = optimizer.trajectory(objective="gwp100")
 flight = optimizer.trajectory(objective="gtp100")
 ```
 
-The final `flight` object is a pandas DataFrame.
+The final `flight` object is a pandas DataFrame. The following is an example:
+
+![example_optimal_flight](./docs/_static/flight_dataframe.png)
 
 ## Use wind data
 
