@@ -1,7 +1,7 @@
 import time
 import warnings
 
-import openap.top as otop
+from openap import top
 
 warnings.filterwarnings("ignore")
 
@@ -10,11 +10,11 @@ origin = "EHAM"
 destination = "LGAV"
 m0 = 0.85
 
-optimizer = otop.CompleteFlight(actype, origin, destination, m0)
-optimizer = otop.MultiPhase(actype, origin, destination, m0)
-# optimizer = otop.Cruise(actype, origin, destination, m0)
-# optimizer = otop.Climb(actype, origin, destination, m0)
-# optimizer = otop.Descent(actype, origin, destination, m0)
+optimizer = top.CompleteFlight(actype, origin, destination, m0)
+# optimizer = top.MultiPhase(actype, origin, destination, m0)
+# optimizer = top.Cruise(actype, origin, destination, m0)
+# optimizer = top.Climb(actype, origin, destination, m0)
+# optimizer = top.Descent(actype, origin, destination, m0)
 
 start = time.time()
 
