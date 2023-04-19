@@ -3,13 +3,14 @@ from openap import aero
 from cartopy import crs as ccrs
 from cartopy.feature import OCEAN, LAND, BORDERS
 import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
+
 import warnings
 
 warnings.filterwarnings("ignore")
 
 
-def trajectory_on_map(df, windfield=None, ax=None, wind_sample=4):
-
+def map(df, windfield=None, ax=None, wind_sample=4):
     lat1, lon1 = df.lat.iloc[0], df.lon.iloc[0]
     lat2, lon2 = df.lat.iloc[-1], df.lon.iloc[-1]
 
@@ -80,5 +81,42 @@ def trajectory_on_map(df, windfield=None, ax=None, wind_sample=4):
     )
 
     ax.legend()
+
+    return plt
+
+
+def trajectory(df, windfield=None):
+    fig = plt.figure(figsize=(10, 4))
+
+    gs = GridSpec(3, 2)
+
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax1.plot(df.ts, df.alt, lw=2, marker=".")
+    ax1.set_ylabel("altitude (ft)")
+    ax1.set_ylim(0, 45_000)
+    ax1.grid(ls=":")
+
+    ax2 = fig.add_subplot(gs[1, 0])
+    ax2.plot(df.ts, df.tas, lw=2, marker=".")
+    ax2.set_ylabel("TAS")
+    ax2.set_ylim(0, 600)
+    ax2.grid(ls=":")
+
+    ax3 = fig.add_subplot(gs[2, 0])
+    ax3.plot(df.ts, df.vs, lw=2, marker=".")
+    ax3.set_ylabel("VS (ft/min)")
+    ax3.set_ylim(-3000, 3000)
+    ax3.grid(ls=":")
+
+    ax5 = fig.add_subplot(
+        gs[:, 1],
+        projection=ccrs.TransverseMercator(
+            central_longitude=df.lon.mean(), central_latitude=df.lat.mean()
+        ),
+    )
+
+    map(df, windfield, ax=ax5, wind_sample=20)
+
+    plt.tight_layout()
 
     return plt

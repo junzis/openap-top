@@ -5,6 +5,8 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import Ridge
 
+import casadi as ca
+
 
 def read_grib(fgrib):
     df = (
@@ -68,3 +70,8 @@ class PolyWind:
             ]
         )
         return v
+
+
+def interp_grid(Lon, Lat, H, V, shape="linear"):
+    interpolant = ca.interpolant("grid_cost", shape, [Lon, Lat, H], V)
+    return interpolant
