@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Callable
 import casadi as ca
 import numpy as np
 import pandas as pd
@@ -10,7 +10,7 @@ from openap.extra.aero import ft, kts, fpm
 from math import pi
 
 try:
-    from . import wind
+    from . import tools
 except:
     RuntimeWarning("cfgrib and sklearn are required for wind integration")
 
@@ -61,14 +61,14 @@ class Base:
         self.fuelflow = oc.FuelFlow(actype, polydeg=2, use_synonym=self.use_synonym)
         self.emission = oc.Emission(actype, use_synonym=self.use_synonym)
 
-        self.proj = Proj(
-            proj="lcc",
-            ellps="WGS84",
-            lat_1=min(self.lat1, self.lat2),
-            lat_2=max(self.lat1, self.lat2),
-            lat_0=(self.lat1 + self.lat2) / 2,
-            lon_0=(self.lon1 + self.lon2) / 2,
-        )
+        # self.proj = Proj(
+        #     proj="lcc",
+        #     ellps="WGS84",
+        #     lat_1=min(self.lat1, self.lat2),
+        #     lat_2=max(self.lat1, self.lat2),
+        #     lat_0=(self.lat1 + self.lat2) / 2,
+        #     lon_0=(self.lon1 + self.lon2) / 2,
+        # )
 
         self.wind = None
 
@@ -84,8 +84,38 @@ class Base:
 
         self.setup_dc()
 
+    def proj(self, lon, lat, inverse=False, symbolic=False):
+        lat0 = (self.lat1 + self.lat2) / 2
+        lon0 = (self.lon1 + self.lon2) / 2
+
+        if not inverse:
+            if symbolic:
+                bearings = oc.aero.bearing(lat0, lon0, lat, lon) / 180 * 3.14159
+                distances = oc.aero.distance(lat0, lon0, lat, lon)
+                x = distances * ca.sin(bearings)
+                y = distances * ca.cos(bearings)
+            else:
+                bearings = openap.aero.bearing(lat0, lon0, lat, lon) / 180 * 3.14159
+                distances = openap.aero.distance(lat0, lon0, lat, lon)
+                x = distances * np.sin(bearings)
+                y = distances * np.cos(bearings)
+
+            return x, y
+        else:
+            x, y = lon, lat
+            if symbolic:
+                distances = ca.sqrt(x**2 + y**2)
+                bearing = ca.arctan2(x, y) * 180 / 3.14159
+                lat, lon = oc.aero.latlon(lat0, lon0, distances, bearing)
+            else:
+                distances = np.sqrt(x**2 + y**2)
+                bearing = np.arctan2(x, y) * 180 / 3.14159
+                lat, lon = openap.aero.latlon(lat0, lon0, distances, bearing)
+
+            return lon, lat
+
     def enable_wind(self, windfield: pd.DataFrame):
-        self.wind = wind.PolyWind(
+        self.wind = tools.PolyWind(
             windfield, self.proj, self.lat1, self.lon1, self.lat2, self.lon2
         )
 
@@ -168,7 +198,7 @@ class Base:
         self.nodes = nodes
         self.polydeg = polydeg
 
-    def init_model(self, objective):
+    def init_model(self, objective, **kwargs):
         # Model variables
         xp = ca.MX.sym("xp")
         yp = ca.MX.sym("yp")
@@ -187,13 +217,24 @@ class Base:
         # Control discretization
         self.dt = self.ts_final / self.nodes
 
-        # objective functions
-        if objective.lower().startswith("ci:"):
+        # Handel objective function
+        if isinstance(objective, Callable):
+            function = objective
+        elif objective.lower().startswith("ci:"):
             ci = int(objective[3:])
-            L = self.obj_ci(self.x, self.u, self.dt, ci)
+            kwargs["ci"] = ci
+            function = self.obj_ci
         else:
-            self.func_obj = getattr(self, f"obj_{objective}")
-            L = self.func_obj(self.x, self.u, self.dt)
+            function = getattr(self, f"obj_{objective}")
+
+        L = function(self.x, self.u, self.dt, **kwargs)
+
+        # # scale objective based on initial guess
+        # x0 = self.x_guess.T
+        # u0 = self.u_guess
+        # dt0 = self.range / 200 / self.nodes
+        # cost = np.sum(function(x0, u0, dt0, symbolic=False, **kwargs))
+        # L = L / cost * 1e2
 
         # Continuous time dynamics
         self.f = ca.Function(
@@ -232,7 +273,7 @@ class Base:
 
         return co2, h2o, sox, soot, nox
 
-    def obj_fuel(self, x, u, dt, symbolic=True):
+    def obj_fuel(self, x, u, dt, symbolic=True, **kwargs):
         xp, yp, h, m = x[0], x[1], x[2], x[3]
         mach, vs, psi = u[0], u[1], u[2]
 
@@ -303,6 +344,44 @@ class Base:
         cost = cost * 1e-3
         return cost * dt
 
+    def obj_grid_cost(self, x, u, dt, **kwargs):
+        xp, yp, h, m = x[0], x[1], x[2], x[3]
+        mach, vs, psi = u[0], u[1], u[2]
+
+        interpolant = kwargs.get("interpolant", None)
+        symbolic = kwargs.get("symbolic", True)
+
+        lon, lat = self.proj(xp, yp, inverse=True, symbolic=symbolic)
+
+        if symbolic:
+            obj = interpolant(ca.vertcat(lon, lat, h))
+        else:
+            obj = interpolant(np.array([lon, lat, h])).full()[0]
+
+        return obj
+
+    def obj_combo(self, x, u, dt, obj1, obj2, ratio=0.5, **kwargs):
+        if isinstance(obj1, str):
+            obj1 = getattr(self, f"obj_{obj1}")
+
+        if isinstance(obj2, str):
+            obj2 = getattr(self, f"obj_{obj2}")
+
+        x0 = self.x_guess.T
+        u0 = self.u_guess
+        dt0 = self.range / 200 / self.nodes
+
+        kwargs_ = kwargs.copy()
+        kwargs_["symbolic"] = False
+
+        n1 = obj1(x0, u0, dt0, **kwargs_).sum()
+        n2 = obj2(x0, u0, dt0, **kwargs_).sum()
+
+        c1 = obj1(x, u, dt, **kwargs)
+        c2 = obj2(x, u, dt, **kwargs)
+
+        return ratio * c1 / n1 + (1 - ratio) * c2 / n2
+
     def to_trajectory(self, ts_final, x_opt, u_opt, climate_metrics=False):
         X = x_opt.full()
         U = u_opt.full()
@@ -312,6 +391,10 @@ class Base:
         Uf = U1 + (U1 - U2)
         U = np.append(U, Uf, axis=1)
         n = self.nodes + 1
+
+        self.X = X
+        self.U = U
+        self.dt = ts_final / n
 
         xp, yp, h, mass = X
         mach, vs, psi = U

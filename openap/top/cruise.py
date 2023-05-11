@@ -31,7 +31,7 @@ class Cruise(Base):
     def allow_cruise_descent(self):
         self.allow_descent = True
 
-    def init_conditions(self):
+    def init_conditions(self, **kwargs):
         """Initialize direct collocation bounds and guesses."""
 
         # Convert lat/lon to cartisian coordinates.
@@ -45,18 +45,19 @@ class Cruise(Base):
         mach_max = self.aircraft["limits"]["MMO"]
         mass_toc = self.initial_mass
         mass_oew = self.aircraft["limits"]["OEW"]
-        h_max = self.aircraft["limits"]["ceiling"]
+        h_max = kwargs.get("h_max", self.aircraft["limits"]["ceiling"])
+        h_min = kwargs.get("h_min", 15_000 * ft)
 
         # Initial conditions - Lower upper bounds
-        self.x_0_lb = [xp_0, yp_0, 15_000 * ft, mass_toc]
+        self.x_0_lb = [xp_0, yp_0, h_min, mass_toc]
         self.x_0_ub = [xp_0, yp_0, h_max, mass_toc]
 
         # Final conditions - Lower and upper bounds
-        self.x_f_lb = [xp_f, yp_f, 15_000 * ft, mass_oew]
+        self.x_f_lb = [xp_f, yp_f, h_min, mass_oew]
         self.x_f_ub = [xp_f, yp_f, h_max, mass_toc]
 
         # States - Lower and upper bounds
-        self.x_lb = [x_min, y_min, 15_000 * ft, mass_oew]
+        self.x_lb = [x_min, y_min, h_min, mass_oew]
         self.x_ub = [x_max, y_max, h_max, mass_toc]
 
         # Control - Lower and upper bound
@@ -74,8 +75,7 @@ class Cruise(Base):
         hdg = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
         self.u_guess = [0.7, 0, hdg * pi / 180]
 
-    def trajectory(self, objective="fuel") -> pd.DataFrame:
-
+    def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
         if self.debug:
             print("Calculating optimal cruise trajectory...")
             ipopt_print = 5
@@ -84,8 +84,8 @@ class Cruise(Base):
             ipopt_print = 0
             print_time = 0
 
-        self.init_model(objective)
-        self.init_conditions()
+        self.init_conditions(**kwargs)
+        self.init_model(objective, **kwargs)
 
         C, D, B = self.collocation_coeff()
 
@@ -199,7 +199,7 @@ class Cruise(Base):
             # max lift > weight
             rho = oc.aero.density(X[k][2])
             S = self.aircraft["wing"]["area"]
-            g.append(1.4 * 0.5 * rho * v ** 2 * S - X[k][3] * oc.aero.g0)
+            g.append(1.4 * 0.5 * rho * v**2 * S - X[k][3] * oc.aero.g0)
             lbg.append([0])
             ubg.append([ca.inf])
 

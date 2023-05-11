@@ -69,7 +69,7 @@ class Climb(Base):
         # Control - guesses
         self.u_guess = [0.2, 1500 * fpm, od_psi]
 
-    def trajectory(self, objective="fuel", df_cruise=None) -> pd.DataFrame:
+    def trajectory(self, objective="fuel", df_cruise=None, **kwargs) -> pd.DataFrame:
 
         if self.debug:
             ipopt_print = 5
@@ -86,8 +86,8 @@ class Climb(Base):
         if self.debug:
             print("Calculating optimal climbing trajectory...")
 
-        self.init_model(objective)
         self.init_conditions(df_cruise)
+        self.init_model(objective, **kwargs)
 
         C, D, B = self.collocation_coeff()
 

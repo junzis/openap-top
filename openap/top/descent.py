@@ -73,7 +73,7 @@ class Descent(Base):
         # Control - guesses
         self.u_guess = [0.7, -1500 * fpm, psi_tod]
 
-    def trajectory(self, objective="fuel", df_cruise=None) -> pd.DataFrame:
+    def trajectory(self, objective="fuel", df_cruise=None, **kwargs) -> pd.DataFrame:
 
         if self.debug:
             ipopt_print = 5
@@ -90,8 +90,8 @@ class Descent(Base):
         if self.debug:
             print("Calculating optimal descent trajectory...")
 
-        self.init_model(objective)
         self.init_conditions(df_cruise)
+        self.init_model(objective, **kwargs)
 
         C, D, B = self.collocation_coeff()
 
@@ -222,8 +222,11 @@ class Descent(Base):
         #     ubg.append([np.tan(np.radians(-2))])
 
         # first position should be along the cruise trajectory
-        xp_1, yp_1 = df_cruise.xp.iloc[-1], df_cruise.yp.iloc[-1]
-        xp_2, yp_2 = df_cruise.xp.iloc[-2], df_cruise.yp.iloc[-2]
+        xp_1, yp_1 = self.proj(df_cruise.lon.iloc[-1], df_cruise.lat.iloc[-1])
+        xp_2, yp_2 = self.proj(df_cruise.lon.iloc[-2], df_cruise.lat.iloc[-2])
+
+        # xp_1, yp_1 = df_cruise.xp.iloc[-1], df_cruise.yp.iloc[-1]
+        # xp_2, yp_2 = df_cruise.xp.iloc[-2], df_cruise.yp.iloc[-2]
         g.append((yp_1 - yp_2) / (xp_1 - xp_2) - (yp_1 - X[0][1]) / (xp_1 - X[0][0]))
         lbg.append([0])
         ubg.append([0])

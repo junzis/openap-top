@@ -15,7 +15,7 @@ from .climb import Climb
 from .descent import Descent
 
 try:
-    from . import wind
+    from . import tools
 except:
     RuntimeWarning("cfgrib and sklearn are required for wind integration")
 
@@ -77,8 +77,9 @@ class CompleteFlight(Base):
         # Control - guesses
         self.u_guess = [0.6, 1000 * fpm, psi]
 
-    def trajectory(self, objective="fuel", return_failed=False) -> pd.DataFrame:
-
+    def trajectory(
+        self, objective="fuel", return_failed=False, **kwargs
+    ) -> pd.DataFrame:
         if self.debug:
             print("Calculating complete global optimal trajectory...")
             ipopt_print = 5
@@ -87,8 +88,8 @@ class CompleteFlight(Base):
             ipopt_print = 0
             print_time = 0
 
-        self.init_model(objective)
         self.init_conditions()
+        self.init_model(objective, **kwargs)
 
         C, D, B = self.collocation_coeff()
 
@@ -248,7 +249,7 @@ class CompleteFlight(Base):
             # max lift > weight
             rho = oc.aero.density(X[k][2])
             S = self.aircraft["wing"]["area"]
-            g.append(1.4 * 0.5 * rho * v ** 2 * S - X[k][3] * oc.aero.g0)
+            g.append(1.4 * 0.5 * rho * v**2 * S - X[k][3] * oc.aero.g0)
             lbg.append([0])
             ubg.append([ca.inf])
 
@@ -333,7 +334,7 @@ class MultiPhase(Base):
         self.descent = Descent(*args, **kwargs)
 
     def enable_wind(self, windfield: pd.DataFrame):
-        w = wind.PolyWind(
+        w = tools.PolyWind(
             windfield, self.proj, self.lat1, self.lon1, self.lat2, self.lon2
         )
         self.curise.wind = w
@@ -360,11 +361,10 @@ class MultiPhase(Base):
         self.descent.emission = oc.Emission(self.actype, engtype)
 
     def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
-
-        if isinstance(objective, Iterable):
-            obj_cl, obj_cr, obj_de = objective
-        else:
+        if isinstance(objective, str):
             obj_cl = obj_cr = obj_de = objective
+        else:
+            obj_cl, obj_cr, obj_de = objective
 
         if self.debug:
             print("Finding the preliminary optimal cruise trajectory parameters...")
@@ -407,7 +407,11 @@ class MultiPhase(Base):
         dfcr.ts = dfcl.ts.iloc[-1] + dfcr.ts
 
         # time at top of descent, considering the distant between last point in cruise and tod
-        d = np.sqrt(np.sum(((dfde.iloc[0] - dfcr.iloc[-1]) ** 2).values[1:3]))
+
+        x1, y1 = self.proj(dfcr.lon.iloc[-1], dfcr.lat.iloc[-1])
+        x2, y2 = self.proj(dfde.lon.iloc[0], dfde.lat.iloc[0])
+
+        d = np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
         v = dfcr.tas.iloc[-1] * kts
         dt = np.round(d / v)
         dfde.ts = dfcr.ts.iloc[-1] + dt + dfde.ts
