@@ -229,12 +229,12 @@ class Base:
 
         L = function(self.x, self.u, self.dt, **kwargs)
 
-        # # scale objective based on initial guess
-        # x0 = self.x_guess.T
-        # u0 = self.u_guess
-        # dt0 = self.range / 200 / self.nodes
-        # cost = np.sum(function(x0, u0, dt0, symbolic=False, **kwargs))
-        # L = L / cost * 1e2
+        # scale objective based on initial guess
+        x0 = self.x_guess.T
+        u0 = self.u_guess
+        dt0 = self.range / 200 / self.nodes
+        cost = np.sum(function(x0, u0, dt0, symbolic=False, **kwargs))
+        L = L / cost * 1e3
 
         # Continuous time dynamics
         self.f = ca.Function(
@@ -311,37 +311,37 @@ class Base:
     def obj_gwp20(self, x, u, dt, **kwargs):
         co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
         cost = co2 + 0.22 * h2o + 619 * nox - 832 * sox + 4288 * soot
-        cost = cost * 1e-3
+        # cost = cost * 1e-3
         return cost * dt
 
     def obj_gwp50(self, x, u, dt, **kwargs):
         co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
         cost = co2 + 0.1 * h2o + 205 * nox - 392 * sox + 2018 * soot
-        cost = cost * 1e-3
+        # cost = cost * 1e-3
         return cost * dt
 
     def obj_gwp100(self, x, u, dt, **kwargs):
         co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
         cost = co2 + 0.06 * h2o + 114 * nox - 226 * sox + 1166 * soot
-        cost = cost * 1e-3
+        # cost = cost * 1e-3
         return cost * dt
 
     def obj_gtp20(self, x, u, dt, **kwargs):
         co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
         cost = co2 + 0.07 * h2o - 222 * nox - 241 * sox + 1245 * soot
-        cost = cost * 1e-3
+        # cost = cost * 1e-3
         return cost * dt
 
     def obj_gtp50(self, x, u, dt, **kwargs):
         co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
         cost = co2 + 0.01 * h2o - 69 * nox - 38 * sox + 195 * soot
-        cost = cost * 1e-3
+        # cost = cost * 1e-3
         return cost * dt
 
     def obj_gtp100(self, x, u, dt, **kwargs):
         co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
         cost = co2 + 0.008 * h2o + 13 * nox - 31 * sox + 161 * soot
-        cost = cost * 1e-3
+        # cost = cost * 1e-3
         return cost * dt
 
     def obj_grid_cost(self, x, u, dt, **kwargs):
@@ -354,11 +354,11 @@ class Base:
         lon, lat = self.proj(xp, yp, inverse=True, symbolic=symbolic)
 
         if symbolic:
-            obj = interpolant(ca.vertcat(lon, lat, h))
+            cost = interpolant(ca.vertcat(lon, lat, h))
         else:
-            obj = interpolant(np.array([lon, lat, h])).full()[0]
+            cost = interpolant(np.array([lon, lat, h])).full()[0]
 
-        return obj
+        return cost
 
     def obj_combo(self, x, u, dt, obj1, obj2, ratio=0.5, **kwargs):
         if isinstance(obj1, str):
