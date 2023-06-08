@@ -243,6 +243,7 @@ class Base:
             [self.xdot(self.x, self.u), L],
             ["x", "u"],
             ["xdot", "L"],
+            {"allow_free": True},
         )
 
     def _calc_emission(self, x, u, symbolic=True):
