@@ -329,7 +329,7 @@ class CompleteFlight(Base):
 class MultiPhase(Base):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.curise = Cruise(*args, **kwargs)
+        self.cruise = Cruise(*args, **kwargs)
         self.climb = Climb(*args, **kwargs)
         self.descent = Descent(*args, **kwargs)
 
@@ -337,16 +337,16 @@ class MultiPhase(Base):
         w = tools.PolyWind(
             windfield, self.proj, self.lat1, self.lon1, self.lat2, self.lon2
         )
-        self.curise.wind = w
+        self.cruise.wind = w
         self.climb.wind = w
         self.descent.wind = w
 
     def change_engine(self, engtype):
-        self.curise.engtype = engtype
-        self.curise.engine = oc.prop.engine(engtype)
-        self.curise.thrust = oc.Thrust(self.actype, engtype)
-        self.curise.fuelflow = oc.FuelFlow(self.actype, engtype, polydeg=2)
-        self.curise.emission = oc.Emission(self.actype, engtype)
+        self.cruise.engtype = engtype
+        self.cruise.engine = oc.prop.engine(engtype)
+        self.cruise.thrust = oc.Thrust(self.actype, engtype)
+        self.cruise.fuelflow = oc.FuelFlow(self.actype, engtype, polydeg=2)
+        self.cruise.emission = oc.Emission(self.actype, engtype)
 
         self.climb.engtype = engtype
         self.climb.engine = oc.prop.engine(engtype)
@@ -369,7 +369,7 @@ class MultiPhase(Base):
         if self.debug:
             print("Finding the preliminary optimal cruise trajectory parameters...")
 
-        dfcr = self.curise.trajectory(obj_cr, **kwargs)
+        dfcr = self.cruise.trajectory(obj_cr, **kwargs)
 
         # climb
         if self.debug:
@@ -381,10 +381,10 @@ class MultiPhase(Base):
         if self.debug:
             print("Finding optimal cruise trajectory...")
 
-        self.curise.initial_mass = dfcl.mass.iloc[-1]
-        self.curise.lat1 = dfcl.lat.iloc[-1]
-        self.curise.lon1 = dfcl.lon.iloc[-1]
-        dfcr = self.curise.trajectory(obj_cr, **kwargs)
+        self.cruise.initial_mass = dfcl.mass.iloc[-1]
+        self.cruise.lat1 = dfcl.lat.iloc[-1]
+        self.cruise.lon1 = dfcl.lon.iloc[-1]
+        dfcr = self.cruise.trajectory(obj_cr, **kwargs)
 
         # descent
         if self.debug:
