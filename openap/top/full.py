@@ -300,11 +300,9 @@ class CompleteFlight(Base):
         self.solution = self.solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
 
         if not self.solver.stats()["success"]:
-            RuntimeWarning("optimzation termninated unsuccessfully")
-
-            if not return_failed:
-                df = None
-
+            RuntimeWarning("optimization failed")
+            return None
+        
         # final timestep
         ts_final = self.solution["x"][-1].full()[0][0]
 
@@ -315,13 +313,13 @@ class CompleteFlight(Base):
         df = self.to_trajectory(ts_final, x_opt, u_opt)
 
         # check if the optimizer has failed due to too short flight distance
-        if df.alt.max() < 6000:
-            RuntimeWarning(
-                "optimization failed, distance may be too short for optimal flight."
-            )
-
-            if not return_failed:
-                df = None
+        if df.alt.max() < 5000:
+            RuntimeWarning("optimization seems to have failed.")
+            return None
+        
+        if df.mass.iloc[-1] < self.oew or df.mass.iloc[-1] > self.mlw:
+            RuntimeWarning("final mass condition violated.")
+            return None
 
         # check final mass, which should be larger than OEW, and smaller than MLW
         if df is not None:

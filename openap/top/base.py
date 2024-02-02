@@ -80,8 +80,6 @@ class Base:
 
         self.debug = False
 
-        self.ipopt_max_iter = 1000
-
         self.setup_dc()
 
     def proj(self, lon, lat, inverse=False, symbolic=False):
@@ -122,9 +120,18 @@ class Base:
     def change_engine(self, engtype):
         self.engtype = engtype
         self.engine = oc.prop.engine(engtype)
-        self.thrust = oc.Thrust(self.actype, engtype, use_synonym=self.use_synonym)
+        self.thrust = oc.Thrust(
+            self.actype,
+            engtype,
+            use_synonym=self.use_synonym,
+            force_engine=True,
+        )
         self.fuelflow = oc.FuelFlow(
-            self.actype, engtype, polydeg=2, use_synonym=self.use_synonym
+            self.actype,
+            engtype,
+            polydeg=2,
+            use_synonym=self.use_synonym,
+            force_engine=True,
         )
         self.emission = oc.Emission(self.actype, engtype, use_synonym=self.use_synonym)
 
@@ -194,9 +201,10 @@ class Base:
 
         return ca.vertcat(dx, dy, dh, dm)
 
-    def setup_dc(self, nodes=40, polydeg=3):
+    def setup_dc(self, nodes=40, polydeg=3, max_iteration=1000):
         self.nodes = nodes
         self.polydeg = polydeg
+        self.ipopt_max_iter = max_iteration
 
     def init_model(self, objective, **kwargs):
         # Model variables
@@ -284,7 +292,11 @@ class Base:
             pa = ca.atan2(vs, v) * 180 / pi
         else:
             fuelflow = openap.FuelFlow(
-                self.actype, self.engtype, polydeg=2, use_synonym=self.use_synonym
+                self.actype,
+                self.engtype,
+                polydeg=2,
+                use_synonym=self.use_synonym,
+                force_engine=True,
             )
             v = openap.aero.mach2tas(mach, h)
             pa = np.arctan2(vs, v) * 180 / pi
