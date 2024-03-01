@@ -48,11 +48,11 @@ class CompleteFlight(Base):
         self.x_0_ub = [xp_0, yp_0, h_min, mass_init]
 
         # Final conditions - Lower and upper bounds
-        self.x_f_lb = [xp_f, yp_f, h_min, mass_oew]
+        self.x_f_lb = [xp_f, yp_f, h_min, mass_oew * 0.5]
         self.x_f_ub = [xp_f, yp_f, h_min, mass_init]
 
         # States - Lower and upper bounds
-        self.x_lb = [x_min, y_min, h_min, mass_oew]
+        self.x_lb = [x_min, y_min, h_min, mass_oew * 0.5]
         self.x_ub = [x_max, y_max, h_max, mass_init]
 
         # Initial guess - states
@@ -254,9 +254,9 @@ class CompleteFlight(Base):
             ubg.append([ca.inf])
 
         # final mass larger than OEW
-        g.append(X[-1][3] - self.oew)
-        lbg.append([0])
-        ubg.append([self.mlw])
+        # g.append(X[-1][3] - self.oew)
+        # lbg.append([0])
+        # ubg.append([self.mlw])
 
         # smooth Mach number change
         for k in range(1, self.nodes):
@@ -322,6 +322,17 @@ class CompleteFlight(Base):
 
             if not return_failed:
                 df = None
+
+        # check final mass, which should be larger than OEW, and smaller than MLW
+        if df is not None:
+            final_mass = df.mass.iloc[-1]
+            if final_mass < self.oew or final_mass > self.mlw:
+                RuntimeWarning(
+                    "optimization failed, final mass smaller than OEW or larger than MLW."
+                )
+
+                if not return_failed:
+                    df = None
 
         return df
 
