@@ -1,13 +1,15 @@
-from typing import Union, Callable
+import warnings
+from math import pi
+from typing import Callable, Union
+
 import casadi as ca
 import numpy as np
-import pandas as pd
-import warnings
-from pyproj import Proj
-import openap
 import openap.casadi as oc
-from openap.extra.aero import ft, kts, fpm
-from math import pi
+import pandas as pd
+from openap.extra.aero import fpm, ft, kts
+from pyproj import Proj
+
+import openap
 
 try:
     from . import tools
@@ -58,7 +60,9 @@ class Base:
         self.thrust = oc.Thrust(actype, use_synonym=self.use_synonym)
         self.wrap = openap.WRAP(actype, use_synonym=self.use_synonym)
         self.drag = oc.Drag(actype, wave_drag=True, use_synonym=self.use_synonym)
-        self.fuelflow = oc.FuelFlow(actype, polydeg=2, use_synonym=self.use_synonym)
+        self.fuelflow = oc.FuelFlow(
+            actype, wave_drag=True, use_synonym=self.use_synonym
+        )
         self.emission = oc.Emission(actype, use_synonym=self.use_synonym)
 
         # self.proj = Proj(
@@ -129,7 +133,7 @@ class Base:
         self.fuelflow = oc.FuelFlow(
             self.actype,
             engtype,
-            polydeg=2,
+            wave_drag=True,
             use_synonym=self.use_synonym,
             force_engine=True,
         )
