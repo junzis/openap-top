@@ -174,9 +174,11 @@ class Base:
             ca.MX: State direvatives
         """
         xp, yp, h, m = x[0], x[1], x[2], x[3]
-        mach, vs, psi = u[0], u[1], u[2]
+        # mach, vs, psi = u[0], u[1], u[2]
+        tas, vs, psi = u[0], u[1], u[2]
 
-        v = oc.aero.mach2tas(mach, h)
+        # v = oc.aero.mach2tas(mach, h)
+        v = tas * oc.aero.kts
         gamma = ca.arctan2(vs, v)
         pa = gamma * 180 / pi
 
@@ -205,12 +207,14 @@ class Base:
         h = ca.MX.sym("h")
         m = ca.MX.sym("m")
 
-        mach = ca.MX.sym("mach")
+        # mach = ca.MX.sym("mach")
+        tas = ca.MX.sym("tas")
         vs = ca.MX.sym("vs")
         psi = ca.MX.sym("psi")
 
         self.x = ca.vertcat(xp, yp, h, m)
-        self.u = ca.vertcat(mach, vs, psi)
+        # self.u = ca.vertcat(mach, vs, psi)
+        self.u = ca.vertcat(tas, vs, psi)
 
         self.ts_final = ca.MX.sym("ts_final")
 
@@ -248,12 +252,14 @@ class Base:
 
     def _calc_emission(self, x, u, symbolic=True):
         xp, yp, h, m = x[0], x[1], x[2], x[3]
-        mach, vs, psi = u[0], u[1], u[2]
+        # mach, vs, psi = u[0], u[1], u[2]
+        tas, vs, psi = u[0], u[1], u[2]
 
         if symbolic:
             fuelflow = self.fuelflow
             emission = self.emission
-            v = oc.aero.mach2tas(mach, h)
+            # v = oc.aero.mach2tas(mach, h)
+            v = tas * oc.aero.kts
             pa = ca.atan2(vs, v) * 180 / pi
         else:
             fuelflow = openap.FuelFlow(
@@ -262,7 +268,8 @@ class Base:
             emission = openap.Emission(
                 self.actype, self.engtype, use_synonym=self.use_synonym
             )
-            v = openap.aero.mach2tas(mach, h)
+            # v = openap.aero.mach2tas(mach, h)
+            v = tas * openap.aero.kts
             pa = np.arctan2(vs, v) * 180 / pi
 
         ff = fuelflow.enroute(m, v / kts, h / ft, pa, limit=False)
@@ -276,17 +283,22 @@ class Base:
 
     def obj_fuel(self, x, u, dt, symbolic=True, **kwargs):
         xp, yp, h, m = x[0], x[1], x[2], x[3]
-        mach, vs, psi = u[0], u[1], u[2]
+        # mach, vs, psi = u[0], u[1], u[2]
+        tas, vs, psi = u[0], u[1], u[2]
 
         if symbolic:
             fuelflow = self.fuelflow
-            v = oc.aero.mach2tas(mach, h)
+            # v = oc.aero.mach2tas(mach, h)
+            v = tas * oc.aero.kts
+
             pa = ca.atan2(vs, v) * 180 / pi
         else:
             fuelflow = openap.FuelFlow(
                 self.actype, self.engtype, polydeg=2, use_synonym=self.use_synonym
             )
-            v = openap.aero.mach2tas(mach, h)
+            # v = openap.aero.mach2tas(mach, h)
+            v = tas * openap.aero.kts
+
             pa = np.arctan2(vs, v) * 180 / pi
 
         ff = fuelflow.enroute(m, v / kts, h / ft, pa, limit=False)
@@ -296,7 +308,8 @@ class Base:
         return dt
 
     def obj_ci(self, x, u, dt, ci, **kwargs):
-        mach, vs, psi = u[0], u[1], u[2]
+        # mach, vs, psi = u[0], u[1], u[2]
+        # tas, vs, psi = u[0], u[1], u[2]
 
         fuel = self.obj_fuel(x, u, dt, **kwargs)
 
@@ -398,7 +411,8 @@ class Base:
         self.dt = ts_final / n
 
         xp, yp, h, mass = X
-        mach, vs, psi = U
+        # mach, vs, psi = U
+        tas, vs, psi = U
         lon, lat = self.proj(xp, yp, inverse=True)
 
         df = (
@@ -410,8 +424,10 @@ class Base:
             .assign(lat=lat)
             .assign(lon=lon)
             .assign(alt=(h / ft).round())
-            .assign(mach=mach.round(4))
-            .assign(tas=(openap.aero.mach2tas(mach, h) / kts).round(2))
+            # .assign(mach=mach.round(4))
+            # .assign(tas=(openap.aero.mach2tas(mach, h) / kts).round(2))
+            .assign(tas=tas.round(2))
+            .assign(mach=openap.aero.tas2mach(tas * kts, h).round(4))
             .assign(vs=(vs / fpm).round())
             .assign(heading=(np.rad2deg(psi) % 360).round(2))
             .assign(mass=mass.round())

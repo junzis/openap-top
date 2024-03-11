@@ -62,20 +62,27 @@ class CompleteFlight(Base):
         m_g = mass_init * np.ones(self.nodes + 1)
         self.x_guess = np.vstack([xp_g, yp_g, h_g, m_g]).T
 
-        # Control init - lower and upper bounds
-        self.u_0_lb = [0.1, 500 * fpm, psi]
-        self.u_0_ub = [0.3, 2500 * fpm, psi]
+        # Control init - lower and upper bounds  ###########################################?
+        # self.u_0_lb = [0.1, 500 * fpm, psi]
+        # self.u_0_ub = [0.3, 2500 * fpm, psi]
+        self.u_0_lb = [100, 500 * fpm, psi]
+        self.u_0_ub = [500, 2500 * fpm, psi]
 
-        # Control final - lower and upper bounds
-        self.u_f_lb = [0.1, -1500 * fpm, psi]
-        self.u_f_ub = [0.3, -300 * fpm, psi]
+        # Control final - lower and upper bounds  ###########################################?
+        # self.u_f_lb = [0.1, -1500 * fpm, psi]
+        # self.u_f_ub = [0.3, -300 * fpm, psi]
+        self.u_f_lb = [100, -1500 * fpm, psi]
+        self.u_f_ub = [500, -300 * fpm, psi]
 
         # Control - Lower and upper bound
-        self.u_lb = [0.1, -2500 * fpm, -pi]
-        self.u_ub = [mach_max, 2500 * fpm, 3 * pi]
+        # self.u_lb = [0.1, -2500 * fpm, -pi]
+        # self.u_ub = [mach_max, 2500 * fpm, 3 * pi]
+        self.u_lb = [100, -2500 * fpm, -pi]
+        self.u_ub = [500, 2500 * fpm, 3 * pi]
 
         # Control - guesses
-        self.u_guess = [0.6, 1000 * fpm, psi]
+        # self.u_guess = [0.6, 1000 * fpm, psi] ###########################################?
+        self.u_guess = [350, 1000 * fpm, psi]
 
     def trajectory(
         self, objective="fuel", return_failed=False, **kwargs
@@ -226,8 +233,10 @@ class CompleteFlight(Base):
             hk = X[k][2]
             hk1 = X[k + 1][2]
             vs = U[k][1]
-            vk = oc.aero.mach2tas(U[k][0], hk)
-            vk1 = oc.aero.mach2tas(U[k + 1][0], hk1)
+            # vk = oc.aero.mach2tas(U[k][0], hk)
+            # vk1 = oc.aero.mach2tas(U[k + 1][0], hk1) #######################################
+            vk = U[k][0] * oc.aero.kts
+            vk1 = U[k + 1][0] * oc.aero.kts
             dvdt = (vk1 - vk) / self.dt
             dhdt = (hk1 - hk) / self.dt
             thrust_max = self.thrust.climb(0, hk / ft, 0)
@@ -239,7 +248,8 @@ class CompleteFlight(Base):
         # aircraft performance constraints
         for k in range(1, self.nodes):
             # max_thrust > drag
-            v = oc.aero.mach2tas(U[k][0], X[k][2])
+            # v = oc.aero.mach2tas(U[k][0], X[k][2]) ###############################
+            v = U[k][0] * oc.aero.kts
             tas = v / kts
             alt = X[k][2] / ft
             g.append(self.thrust.cruise(0, alt) - self.drag.clean(X[k][3], tas, alt))
@@ -261,14 +271,18 @@ class CompleteFlight(Base):
         # smooth Mach number change
         for k in range(1, self.nodes):
             g.append(U[k][0] - U[k - 1][0])
-            lbg.append([-0.2])
-            ubg.append([0.2])  # to be tunned
+            # lbg.append([-0.2])
+            # ubg.append([0.2])  # to be tunned ##################################
+            lbg.append([-100])
+            ubg.append([100])
 
         # smooth vertical rate change
         for k in range(1, self.nodes):
             g.append(U[k][1] - U[k - 1][1])
             lbg.append([-500 * fpm])
             ubg.append([500 * fpm])  # to be tunned
+            # lbg.append([-50 * fpm])
+            # ubg.append([50 * fpm])  # to be tunned
 
         # smooth heading change
         for k in range(1, self.nodes):
