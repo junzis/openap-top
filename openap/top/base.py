@@ -1,13 +1,15 @@
-from typing import Union, Callable
+import warnings
+from math import pi
+from typing import Callable, Union
+
 import casadi as ca
 import numpy as np
-import pandas as pd
-import warnings
-from pyproj import Proj
-import openap
 import openap.casadi as oc
-from openap.extra.aero import ft, kts, fpm
-from math import pi
+import pandas as pd
+from openap.extra.aero import fpm, ft, kts
+from pyproj import Proj
+
+import openap
 
 try:
     from . import tools
@@ -58,7 +60,9 @@ class Base:
         self.thrust = oc.Thrust(actype, use_synonym=self.use_synonym)
         self.wrap = openap.WRAP(actype, use_synonym=self.use_synonym)
         self.drag = oc.Drag(actype, wave_drag=True, use_synonym=self.use_synonym)
-        self.fuelflow = oc.FuelFlow(actype, polydeg=2, use_synonym=self.use_synonym)
+        self.fuelflow = oc.FuelFlow(
+            actype, wave_drag=True, use_synonym=self.use_synonym
+        )
         self.emission = oc.Emission(actype, use_synonym=self.use_synonym)
 
         # self.proj = Proj(
@@ -79,8 +83,6 @@ class Base:
             warnings.warn(f"The destination is likely out of maximum cruise range.")
 
         self.debug = False
-
-        self.ipopt_max_iter = 1000
 
         self.setup_dc()
 
@@ -122,9 +124,18 @@ class Base:
     def change_engine(self, engtype):
         self.engtype = engtype
         self.engine = oc.prop.engine(engtype)
-        self.thrust = oc.Thrust(self.actype, engtype, use_synonym=self.use_synonym)
+        self.thrust = oc.Thrust(
+            self.actype,
+            engtype,
+            use_synonym=self.use_synonym,
+            force_engine=True,
+        )
         self.fuelflow = oc.FuelFlow(
-            self.actype, engtype, polydeg=2, use_synonym=self.use_synonym
+            self.actype,
+            engtype,
+            wave_drag=True,
+            use_synonym=self.use_synonym,
+            force_engine=True,
         )
         self.emission = oc.Emission(self.actype, engtype, use_synonym=self.use_synonym)
 
@@ -196,9 +207,10 @@ class Base:
 
         return ca.vertcat(dx, dy, dh, dm)
 
-    def setup_dc(self, nodes=40, polydeg=3):
+    def setup_dc(self, nodes=40, polydeg=3, max_iteration=1000):
         self.nodes = nodes
         self.polydeg = polydeg
+        self.ipopt_max_iter = max_iteration
 
     def init_model(self, objective, **kwargs):
         # Model variables
@@ -294,7 +306,11 @@ class Base:
             pa = ca.atan2(vs, v) * 180 / pi
         else:
             fuelflow = openap.FuelFlow(
-                self.actype, self.engtype, polydeg=2, use_synonym=self.use_synonym
+                self.actype,
+                self.engtype,
+                polydeg=2,
+                use_synonym=self.use_synonym,
+                force_engine=True,
             )
             # v = openap.aero.mach2tas(mach, h)
             v = tas * openap.aero.kts
