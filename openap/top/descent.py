@@ -1,14 +1,15 @@
+from math import pi
+
 import casadi as ca
 import numpy as np
-import pandas as pd
-import openap
 import openap.casadi as oc
+import pandas as pd
+from openap.extra.aero import fpm, ft, kts
+
+import openap
 
 from .base import Base
 from .cruise import Cruise
-
-from openap.extra.aero import ft, kts, fpm
-from math import pi
 
 
 class Descent(Base):
@@ -32,31 +33,33 @@ class Descent(Base):
         x_max = max(xp_0, xp_f) + 10_000
         y_min = min(yp_0, yp_f) - 10_000
         y_max = max(yp_0, yp_f) + 10_000
+        ts_min = 0
+        ts_max = 6 * 3600
 
         mass_tod = df_cruise.mass.iloc[-1]
         mass_oew = self.aircraft["limits"]["OEW"]
         cruise_mach = df_cruise.mach.iloc[-1]
 
         # Initial conditions - Lower and upper bounds
-        self.x_0_lb = [x_min, y_min, h_tod, mass_tod]
-        self.x_0_ub = [x_max, y_max, h_tod, mass_tod]
+        self.x_0_lb = [x_min, y_min, h_tod, mass_tod, ts_min]
+        self.x_0_ub = [x_max, y_max, h_tod, mass_tod, ts_min]
 
         # Final conditions - Lower and upper bounds
-        self.x_f_lb = [xp_f, yp_f, h_min, mass_oew]
-        self.x_f_ub = [xp_f, yp_f, h_min, mass_tod]
+        self.x_f_lb = [xp_f, yp_f, h_min, mass_oew, ts_min]
+        self.x_f_ub = [xp_f, yp_f, h_min, mass_tod, ts_max]
 
         # States - Lower and upper bounds
-        self.x_lb = [x_min, y_min, h_min, mass_oew]
-        self.x_ub = [x_max, y_max, h_tod, mass_tod]
+        self.x_lb = [x_min, y_min, h_min, mass_oew, ts_min]
+        self.x_ub = [x_max, y_max, h_tod, mass_tod, ts_max]
 
         # States - guesses
         dist = h_tod / np.tan(np.radians(3))  # 3 deg
-        xp_g = xp_f - np.linspace(dist * np.sin(od_psi), 0, self.nodes + 1)
-        yp_g = yp_f - np.linspace(dist * np.cos(od_psi), 0, self.nodes + 1)
-        h_g = np.linspace(h_tod, h_min, self.nodes + 1)
-        # h_g = h_tod * np.ones(self.nodes + 1)
-        m_g = mass_tod * np.ones(self.nodes + 1)
-        self.x_guess = np.vstack([xp_g, yp_g, h_g, m_g]).T
+        xp_guess = xp_f - np.linspace(dist * np.sin(od_psi), 0, self.nodes + 1)
+        yp_guess = yp_f - np.linspace(dist * np.cos(od_psi), 0, self.nodes + 1)
+        h_guess = np.linspace(h_tod, h_min, self.nodes + 1)
+        m_guess = mass_tod * np.ones(self.nodes + 1)
+        ts_guess = np.linspace(0, 6 * 3600, self.nodes + 1)
+        self.x_guess = np.vstack([xp_guess, yp_guess, h_guess, m_guess, ts_guess]).T
 
         # Control init - lower and upper bounds
         self.u_0_lb = [cruise_mach, -2000 * fpm, psi_tod]
@@ -157,7 +160,7 @@ class Descent(Base):
                     xpc = xpc + C[r + 1, j] * Xc[r]
 
                 # Append collocation equations
-                fj, qj = self.f(Xc[j - 1], Uk)
+                fj, qj = self.func_dynamics(Xc[j - 1], Uk)
                 g.append(self.dt * fj - xpc)
                 lbg.append([0] * nstates)
                 ubg.append([0] * nstates)
@@ -195,6 +198,12 @@ class Descent(Base):
         ubw.append([ca.inf])
         w0.append([3600])
 
+        # constrain time and dt
+        for k in range(1, self.nodes):
+            g.append(X[k][4] - X[k - 1][4] - self.dt)
+            lbg.append([-1])
+            ubg.append([1])
+
         # smooth Mach number changes
         for k in range(1, self.nodes):
             g.append(U[k][0] - U[k - 1][0])
@@ -222,11 +231,15 @@ class Descent(Base):
         #     ubg.append([np.tan(np.radians(-2))])
 
         # first position should be along the cruise trajectory
-        xp_1, yp_1 = self.proj(df_cruise.lon.iloc[-1], df_cruise.lat.iloc[-1])
-        xp_2, yp_2 = self.proj(df_cruise.lon.iloc[-2], df_cruise.lat.iloc[-2])
+        xp_1, yp_1 = self.proj(
+            df_cruise.longitude.iloc[-1], df_cruise.latitude.iloc[-1]
+        )
+        xp_2, yp_2 = self.proj(
+            df_cruise.longitude.iloc[-2], df_cruise.latitude.iloc[-2]
+        )
 
-        # xp_1, yp_1 = df_cruise.xp.iloc[-1], df_cruise.yp.iloc[-1]
-        # xp_2, yp_2 = df_cruise.xp.iloc[-2], df_cruise.yp.iloc[-2]
+        # xp_1, yp_1 = df_cruise.x.iloc[-1], df_cruise.y.iloc[-1]
+        # xp_2, yp_2 = df_cruise.x.iloc[-2], df_cruise.y.iloc[-2]
         g.append((yp_1 - yp_2) / (xp_1 - xp_2) - (yp_1 - X[0][1]) / (xp_1 - X[0][0]))
         lbg.append([0])
         ubg.append([0])

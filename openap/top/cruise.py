@@ -1,11 +1,12 @@
+from math import pi
+
 import casadi as ca
 import numpy as np
-import pandas as pd
-import openap
 import openap.casadi as oc
+import pandas as pd
+from openap.extra.aero import fpm, ft, kts
 
-from openap.extra.aero import ft, kts, fpm
-from math import pi
+import openap
 
 from .base import Base
 
@@ -41,6 +42,8 @@ class Cruise(Base):
         x_max = max(xp_0, xp_f) + 10_000
         y_min = min(yp_0, yp_f) - 10_000
         y_max = max(yp_0, yp_f) + 10_000
+        ts_min = 0
+        ts_max = 24 * 3600
 
         mach_max = self.aircraft["limits"]["MMO"]
         mass_toc = self.initial_mass
@@ -49,27 +52,28 @@ class Cruise(Base):
         h_min = kwargs.get("h_min", 15_000 * ft)
 
         # Initial conditions - Lower upper bounds
-        self.x_0_lb = [xp_0, yp_0, h_min, mass_toc]
-        self.x_0_ub = [xp_0, yp_0, h_max, mass_toc]
+        self.x_0_lb = [xp_0, yp_0, h_min, mass_toc, ts_min]
+        self.x_0_ub = [xp_0, yp_0, h_max, mass_toc, ts_min]
 
         # Final conditions - Lower and upper bounds
-        self.x_f_lb = [xp_f, yp_f, h_min, mass_oew]
-        self.x_f_ub = [xp_f, yp_f, h_max, mass_toc]
+        self.x_f_lb = [xp_f, yp_f, h_min, mass_oew, ts_min]
+        self.x_f_ub = [xp_f, yp_f, h_max, mass_toc, ts_max]
 
         # States - Lower and upper bounds
-        self.x_lb = [x_min, y_min, h_min, mass_oew]
-        self.x_ub = [x_max, y_max, h_max, mass_toc]
+        self.x_lb = [x_min, y_min, h_min, mass_oew, ts_min]
+        self.x_ub = [x_max, y_max, h_max, mass_toc, ts_max]
 
         # Control - Lower and upper bound
         self.u_lb = [0.5, -500 * fpm, -pi]
         self.u_ub = [mach_max, 500 * fpm, 3 * pi]
 
         # Initial guess - states
-        xp_g = np.linspace(xp_0, xp_f, self.nodes + 1)
-        yp_g = np.linspace(yp_0, yp_f, self.nodes + 1)
-        h_g = h_max * np.ones(self.nodes + 1)
-        m_g = mass_toc * np.ones(self.nodes + 1)
-        self.x_guess = np.vstack([xp_g, yp_g, h_g, m_g]).T
+        xp_guess = np.linspace(xp_0, xp_f, self.nodes + 1)
+        yp_guess = np.linspace(yp_0, yp_f, self.nodes + 1)
+        h_guess = h_max * np.ones(self.nodes + 1)
+        m_guess = mass_toc * np.ones(self.nodes + 1)
+        ts_guess = np.linspace(0, 6 * 3600, self.nodes + 1)
+        self.x_guess = np.vstack([xp_guess, yp_guess, h_guess, m_guess, ts_guess]).T
 
         # Initial guess - controls
         hdg = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
@@ -142,7 +146,7 @@ class Cruise(Base):
                     xpc = xpc + C[r + 1, j] * Xc[r]
 
                 # Append collocation equations
-                fj, qj = self.f(Xc[j - 1], Uk)
+                fj, qj = self.func_dynamics(Xc[j - 1], Uk)
                 g.append(self.dt * fj - xpc)
                 lbg.append([0] * nstates)
                 ubg.append([0] * nstates)
@@ -202,6 +206,12 @@ class Cruise(Base):
             g.append(1.4 * 0.5 * rho * v**2 * S - X[k][3] * oc.aero.g0)
             lbg.append([0])
             ubg.append([ca.inf])
+
+        # constrain time and dt
+        for k in range(1, self.nodes):
+            g.append(X[k][4] - X[k - 1][4] - self.dt)
+            lbg.append([-1])
+            ubg.append([1])
 
         # smooth Mach number change
         for k in range(1, self.nodes):

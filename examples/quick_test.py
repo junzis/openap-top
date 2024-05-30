@@ -1,8 +1,10 @@
+# %%
 import time
 import warnings
 
 from openap import top
 
+# %%
 warnings.filterwarnings("ignore")
 
 actype = "A320"

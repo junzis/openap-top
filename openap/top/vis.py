@@ -1,18 +1,19 @@
-import numpy as np
-from openap import aero
-from cartopy import crs as ccrs
-from cartopy.feature import OCEAN, LAND, BORDERS
+import warnings
+
 import matplotlib.pyplot as plt
+import numpy as np
+from cartopy import crs as ccrs
+from cartopy.feature import BORDERS, LAND, OCEAN
 from matplotlib.gridspec import GridSpec
 
-import warnings
+from openap import aero
 
 warnings.filterwarnings("ignore")
 
 
 def map(df, windfield=None, ax=None, wind_sample=4):
-    lat1, lon1 = df.lat.iloc[0], df.lon.iloc[0]
-    lat2, lon2 = df.lat.iloc[-1], df.lon.iloc[-1]
+    lat1, lon1 = df.latitude.iloc[0], df.longitude.iloc[0]
+    lat2, lon2 = df.latitude.iloc[-1], df.longitude.iloc[-1]
 
     latmin, latmax = min(lat1, lat2), max(lat1, lat2)
     lonmin, lonmax = min(lon1, lon2), max(lon1, lon2)
@@ -20,7 +21,8 @@ def map(df, windfield=None, ax=None, wind_sample=4):
     if ax is None:
         ax = plt.axes(
             projection=ccrs.TransverseMercator(
-                central_longitude=df.lon.mean(), central_latitude=df.lat.mean()
+                central_longitude=df.longitude.mean(),
+                central_latitude=df.latitude.mean(),
             )
         )
 
@@ -33,7 +35,7 @@ def map(df, windfield=None, ax=None, wind_sample=4):
 
     if windfield is not None:
         # get the closed altitude
-        h_max = df.alt.max() * aero.ft
+        h_max = df.altitude.max() * aero.ft
         fl = int(round(h_max / aero.ft / 100, -1))
         idx = np.argmin(abs(windfield.h.unique() - h_max))
         df_wind = (
@@ -71,8 +73,8 @@ def map(df, windfield=None, ax=None, wind_sample=4):
 
     # trajectory
     ax.plot(
-        df.lon,
-        df.lat,
+        df.longitude,
+        df.latitude,
         color="tab:green",
         transform=ccrs.Geodetic(),
         linewidth=2,
@@ -91,7 +93,7 @@ def trajectory(df, windfield=None):
     gs = GridSpec(3, 2)
 
     ax1 = fig.add_subplot(gs[0, 0])
-    ax1.plot(df.ts, df.alt, lw=2, marker=".")
+    ax1.plot(df.ts, df.altitude, lw=2, marker=".")
     ax1.set_ylabel("altitude (ft)")
     ax1.set_ylim(0, 45_000)
     ax1.grid(ls=":")
@@ -103,7 +105,7 @@ def trajectory(df, windfield=None):
     ax2.grid(ls=":")
 
     ax3 = fig.add_subplot(gs[2, 0])
-    ax3.plot(df.ts, df.vs, lw=2, marker=".")
+    ax3.plot(df.ts, df.vertical_rate, lw=2, marker=".")
     ax3.set_ylabel("VS (ft/min)")
     ax3.set_ylim(-3000, 3000)
     ax3.grid(ls=":")
@@ -111,7 +113,8 @@ def trajectory(df, windfield=None):
     ax5 = fig.add_subplot(
         gs[:, 1],
         projection=ccrs.TransverseMercator(
-            central_longitude=df.lon.mean(), central_latitude=df.lat.mean()
+            central_longitude=df.longitude.mean(),
+            central_latitude=df.latitude.mean(),
         ),
     )
 

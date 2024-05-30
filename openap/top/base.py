@@ -184,7 +184,7 @@ class Base:
         Returns:
             ca.MX: State direvatives
         """
-        xp, yp, h, m = x[0], x[1], x[2], x[3]
+        xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
         mach, vs, psi = u[0], u[1], u[2]
 
         v = oc.aero.mach2tas(mach, h)
@@ -203,7 +203,9 @@ class Base:
 
         dm = -self.fuelflow.enroute(m, v / kts, h / ft, pa, limit=False)
 
-        return ca.vertcat(dx, dy, dh, dm)
+        dt = 1
+
+        return ca.vertcat(dx, dy, dh, dm, dt)
 
     def setup_dc(self, nodes=40, polydeg=3, max_iteration=1000):
         self.nodes = nodes
@@ -216,12 +218,13 @@ class Base:
         yp = ca.MX.sym("yp")
         h = ca.MX.sym("h")
         m = ca.MX.sym("m")
+        ts = ca.MX.sym("ts")
 
         mach = ca.MX.sym("mach")
         vs = ca.MX.sym("vs")
         psi = ca.MX.sym("psi")
 
-        self.x = ca.vertcat(xp, yp, h, m)
+        self.x = ca.vertcat(xp, yp, h, m, ts)
         self.u = ca.vertcat(mach, vs, psi)
 
         self.ts_final = ca.MX.sym("ts_final")
@@ -249,7 +252,7 @@ class Base:
         L = L / cost * 1e3
 
         # Continuous time dynamics
-        self.f = ca.Function(
+        self.func_dynamics = ca.Function(
             "f",
             [self.x, self.u],
             [self.xdot(self.x, self.u), L],
@@ -287,7 +290,7 @@ class Base:
         return co2, h2o, sox, soot, nox
 
     def obj_fuel(self, x, u, dt, symbolic=True, **kwargs):
-        xp, yp, h, m = x[0], x[1], x[2], x[3]
+        xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
         mach, vs, psi = u[0], u[1], u[2]
 
         if symbolic:
@@ -362,7 +365,7 @@ class Base:
         return cost * dt
 
     def obj_grid_cost(self, x, u, dt, **kwargs):
-        xp, yp, h, m = x[0], x[1], x[2], x[3]
+        xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
         mach, vs, psi = u[0], u[1], u[2]
 
         interpolant = kwargs.get("interpolant", None)
@@ -371,9 +374,9 @@ class Base:
         lon, lat = self.proj(xp, yp, inverse=True, symbolic=symbolic)
 
         if symbolic:
-            cost = interpolant(ca.vertcat(lon, lat, h))
+            cost = interpolant(ca.vertcat(lon, lat, h, ts))
         else:
-            cost = interpolant(np.array([lon, lat, h])).full()[0]
+            cost = interpolant(np.array([lon, lat, h, ts])).full()[0]
 
         return cost
 
@@ -413,22 +416,23 @@ class Base:
         self.U = U
         self.dt = ts_final / n
 
-        xp, yp, h, mass = X
+        xp, yp, h, mass, ts = X
         mach, vs, psi = U
         lon, lat = self.proj(xp, yp, inverse=True)
+        ts_ = np.linspace(0, ts_final, n).round()
 
         df = (
             pd.DataFrame()
-            .assign(ts=np.linspace(0, ts_final, n).round())
-            .assign(xp=xp)
-            .assign(yp=yp)
+            .assign(ts=ts_)
+            .assign(x=xp)
+            .assign(y=yp)
             .assign(h=h)
-            .assign(lat=lat)
-            .assign(lon=lon)
-            .assign(alt=(h / ft).round())
+            .assign(latitude=lat)
+            .assign(longitude=lon)
+            .assign(altitude=(h / ft).round())
             .assign(mach=mach.round(4))
             .assign(tas=(openap.aero.mach2tas(mach, h) / kts).round(2))
-            .assign(vs=(vs / fpm).round())
+            .assign(vertical_rate=(vs / fpm).round())
             .assign(heading=(np.rad2deg(psi) % 360).round(2))
             .assign(mass=mass.round())
         )

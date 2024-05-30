@@ -1,11 +1,12 @@
+from math import pi
+
 import casadi as ca
 import numpy as np
-import pandas as pd
-import openap
 import openap.casadi as oc
+import pandas as pd
+from openap.extra.aero import fpm, ft, kts
 
-from openap.extra.aero import ft, kts, fpm
-from math import pi
+import openap
 
 from .base import Base
 from .cruise import Cruise
@@ -37,22 +38,27 @@ class Climb(Base):
         self.traj_range = self.wrap.climb_range()["maximum"] * 1000 * 1.5
 
         # Initial conditions - Lower and upper bounds
-        self.x_0_lb = self.x_0_ub = [xp_0, yp_0, h_min, mass_0]
+        self.x_0_lb = self.x_0_ub = [xp_0, yp_0, h_min, mass_0, 0]
 
         # Final conditions - Lower and upper bounds
-        self.x_f_lb = [x_min, y_min, h_toc, mass_oew]
-        self.x_f_ub = [x_max, y_max, h_toc + 1000, mass_0]
+        self.x_f_lb = [x_min, y_min, h_toc, mass_oew, 0]
+        self.x_f_ub = [x_max, y_max, h_toc + 1000, mass_0, 6 * 3600]
 
         # States - Lower and upper bounds
-        self.x_lb = [x_min, y_min, h_min, mass_oew]
-        self.x_ub = [x_max, y_max, h_toc, mass_0]
+        self.x_lb = [x_min, y_min, h_min, mass_oew, 0]
+        self.x_ub = [x_max, y_max, h_toc, mass_0, 24 * 3600]
 
         # States - guesses
-        xp_g = xp_0 + np.linspace(0, self.traj_range * np.sin(od_psi), self.nodes + 1)
-        yp_g = yp_0 + np.linspace(0, self.traj_range * np.cos(od_psi), self.nodes + 1)
-        h_g = np.linspace(h_min, h_toc, self.nodes + 1)
-        m_g = mass_0 * np.ones(self.nodes + 1)
-        self.x_guess = np.vstack([xp_g, yp_g, h_g, m_g]).T
+        xp_guess = xp_0 + np.linspace(
+            0, self.traj_range * np.sin(od_psi), self.nodes + 1
+        )
+        yp_guess = yp_0 + np.linspace(
+            0, self.traj_range * np.cos(od_psi), self.nodes + 1
+        )
+        h_guess = np.linspace(h_min, h_toc, self.nodes + 1)
+        m_guess = mass_0 * np.ones(self.nodes + 1)
+        ts_guess = np.linspace(0, 6 * 3600, self.nodes + 1)
+        self.x_guess = np.vstack([xp_guess, yp_guess, h_guess, m_guess, ts_guess]).T
 
         # Control init - lower and upper bounds
         self.u_0_lb = [0.1, 0 * fpm, -pi]
@@ -153,7 +159,7 @@ class Climb(Base):
                     xpc = xpc + C[r + 1, j] * Xc[r]
 
                 # Append collocation equations
-                fj, qj = self.f(Xc[j - 1], Uk)
+                fj, qj = self.func_dynamics(Xc[j - 1], Uk)
                 g.append(self.dt * fj - xpc)
                 lbg.append([0] * nstates)
                 ubg.append([0] * nstates)
@@ -212,6 +218,12 @@ class Climb(Base):
             lbg.append([0])
             ubg.append([ca.inf])
 
+        # constrain time and dt
+        for k in range(1, self.nodes):
+            g.append(X[k][4] - X[k - 1][4] - self.dt)
+            lbg.append([-1])
+            ubg.append([1])
+
         # smooth vertical rate changes
         for k in range(1, self.nodes):
             g.append(U[k][1] - U[k - 1][1])
@@ -225,8 +237,8 @@ class Climb(Base):
             ubg.append([5 * pi / 180])
 
         # final position should be along the cruise trajectory
-        xp_1, yp_1 = df_cruise.xp.iloc[0], df_cruise.yp.iloc[0]
-        xp_2, yp_2 = df_cruise.xp.iloc[1], df_cruise.yp.iloc[1]
+        xp_1, yp_1 = df_cruise.x.iloc[0], df_cruise.y.iloc[0]
+        xp_2, yp_2 = df_cruise.x.iloc[1], df_cruise.y.iloc[1]
         g.append((yp_2 - yp_1) / (xp_2 - xp_1) - (X[-1][1] - yp_1) / (X[-1][0] - xp_1))
         lbg.append([0])
         ubg.append([0])

@@ -1,11 +1,11 @@
+import casadi as ca
 import cfgrib
 import pandas as pd
-from openap import aero
+from sklearn.linear_model import Ridge
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import PolynomialFeatures
-from sklearn.linear_model import Ridge
 
-import casadi as ca
+from openap import aero
 
 
 def read_grib(fgrib):
@@ -72,6 +72,6 @@ class PolyWind:
         return v
 
 
-def interp_grid(Lon, Lat, H, V, shape="linear"):
-    interpolant = ca.interpolant("grid_cost", shape, [Lon, Lat, H], V)
+def interp_grid(Lon, Lat, H, T, V, shape="linear"):
+    interpolant = ca.interpolant("grid_cost", shape, [Lon, Lat, H, T], V)
     return interpolant
