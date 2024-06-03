@@ -4,12 +4,11 @@ from typing import Callable, Union
 
 import casadi as ca
 import numpy as np
+import openap
 import openap.casadi as oc
 import pandas as pd
 from openap.extra.aero import fpm, ft, kts
 from pyproj import Proj
-
-import openap
 
 try:
     from . import tools
@@ -189,7 +188,6 @@ class Base:
 
         v = oc.aero.mach2tas(mach, h)
         gamma = ca.arctan2(vs, v)
-        pa = gamma * 180 / pi
 
         dx = v * ca.sin(psi) * ca.cos(gamma)
         if self.wind is not None:
@@ -201,7 +199,7 @@ class Base:
 
         dh = vs
 
-        dm = -self.fuelflow.enroute(m, v / kts, h / ft, pa, limit=False)
+        dm = -self.fuelflow.enroute(m, v / kts, h / ft, vs / fpm, limit=False)
 
         dt = 1
 
@@ -269,7 +267,6 @@ class Base:
             fuelflow = self.fuelflow
             emission = self.emission
             v = oc.aero.mach2tas(mach, h)
-            pa = ca.atan2(vs, v) * 180 / pi
         else:
             fuelflow = openap.FuelFlow(
                 self.actype, self.engtype, polydeg=2, use_synonym=self.use_synonym
@@ -278,9 +275,8 @@ class Base:
                 self.actype, self.engtype, use_synonym=self.use_synonym
             )
             v = openap.aero.mach2tas(mach, h)
-            pa = np.arctan2(vs, v) * 180 / pi
 
-        ff = fuelflow.enroute(m, v / kts, h / ft, pa, limit=False)
+        ff = fuelflow.enroute(m, v / kts, h / ft, vs / fpm, limit=False)
         co2 = emission.co2(ff)
         h2o = emission.h2o(ff)
         sox = emission.sox(ff)
@@ -296,19 +292,16 @@ class Base:
         if symbolic:
             fuelflow = self.fuelflow
             v = oc.aero.mach2tas(mach, h)
-            pa = ca.atan2(vs, v) * 180 / pi
         else:
             fuelflow = openap.FuelFlow(
                 self.actype,
                 self.engtype,
-                polydeg=2,
                 use_synonym=self.use_synonym,
                 force_engine=True,
             )
             v = openap.aero.mach2tas(mach, h)
-            pa = np.arctan2(vs, v) * 180 / pi
 
-        ff = fuelflow.enroute(m, v / kts, h / ft, pa, limit=False)
+        ff = fuelflow.enroute(m, v / kts, h / ft, vs / fpm, limit=False)
         return ff * dt
 
     def obj_time(self, x, u, dt, **kwargs):

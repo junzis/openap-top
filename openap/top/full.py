@@ -1,13 +1,13 @@
+import warnings
 from collections.abc import Iterable
 from math import pi
 
 import casadi as ca
 import numpy as np
+import openap
 import openap.casadi as oc
 import pandas as pd
 from openap.extra.aero import fpm, ft, kts
-
-import openap
 
 from .base import Base
 from .climb import Climb
@@ -199,7 +199,7 @@ class CompleteFlight(Base):
         if self.range > 1500_000:
             dd = self.range / (self.nodes + 1)
             max_climb_range = 500_000
-            max_descent_range = 500_000
+            max_descent_range = 300_000
             idx_toc = int(max_climb_range / dd)
             idx_tod = int((self.range - max_descent_range) / dd)
 
@@ -214,6 +214,15 @@ class CompleteFlight(Base):
                 lbg.append([15000 * ft])
                 ubg.append([ca.inf])
 
+                # # lift > weight
+                # mass = X[k][3]
+                # tas = oc.aero.mach2tas(U[k][0], X[k][2]) / kts
+                # alt = X[k][2] / ft
+                # cl = self.drag._cl(mass, tas, alt)
+                # g.append(cl)
+                # lbg.append([0])
+                # ubg.append([0.5])
+
             for k in range(0, idx_toc):
                 g.append(U[k][1])
                 lbg.append([0])
@@ -224,42 +233,32 @@ class CompleteFlight(Base):
                 lbg.append([-ca.inf])
                 ubg.append([0])
 
-        # total energy model
-        for k in range(self.nodes - 1):
-            hk = X[k][2]
-            hk1 = X[k + 1][2]
-            vs = U[k][1]
-            vk = oc.aero.mach2tas(U[k][0], hk)
-            vk1 = oc.aero.mach2tas(U[k + 1][0], hk1)
-            dvdt = (vk1 - vk) / self.dt
-            dhdt = (hk1 - hk) / self.dt
-            thrust_max = self.thrust.climb(0, hk / ft, 0)
-            drag = self.drag.clean(X[k][3], vk / kts, hk / ft)
-            g.append((thrust_max - drag) / X[k][3] - oc.aero.g0 / vk * dhdt - dvdt)
-            lbg.append([0])
-            ubg.append([ca.inf])
-
         # aircraft performance constraints
         for k in range(1, self.nodes):
-            # max_thrust > drag
+
+            S = self.aircraft["wing"]["area"]
+            mass = X[k][3]
             v = oc.aero.mach2tas(U[k][0], X[k][2])
             tas = v / kts
             alt = X[k][2] / ft
-            g.append(self.thrust.cruise(0, alt) - self.drag.clean(X[k][3], tas, alt))
-            lbg.append([0])
-            ubg.append([ca.inf])
-
-            # max lift > weight
             rho = oc.aero.density(X[k][2])
-            S = self.aircraft["wing"]["area"]
-            g.append(1.4 * 0.5 * rho * v**2 * S - X[k][3] * oc.aero.g0)
+            thrust_max = self.thrust.cruise(tas, alt)
+
+            # max_thrust * 95% > drag (5% margin)
+            g.append(thrust_max * 0.95 - self.drag.clean(mass, tas, alt))
             lbg.append([0])
             ubg.append([ca.inf])
 
-        # final mass larger than OEW
-        # g.append(X[-1][3] - self.oew)
-        # lbg.append([0])
-        # ubg.append([self.mlw])
+            # max lift * 80% > weight (20% margin)
+            drag_max = thrust_max * 0.9
+            cd_max = drag_max / (0.5 * rho * v**2 * S)
+            cd0 = self.drag.polar["clean"]["cd0"]
+            ck = self.drag.polar["clean"]["k"]
+            cl_max = ca.sqrt((cd_max - cd0) / ck)
+            L_max = cl_max * 0.5 * rho * v**2 * S
+            g.append(L_max * 0.8 - mass * oc.aero.g0)
+            lbg.append([0])
+            ubg.append([ca.inf])
 
         # constrain time and dt
         for k in range(1, self.nodes):
@@ -309,7 +308,7 @@ class CompleteFlight(Base):
         self.solution = self.solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
 
         if not self.solver.stats()["success"]:
-            RuntimeWarning("optimization failed")
+            warnings.warn("optimization failed")
             return None
 
         # final timestep
@@ -320,26 +319,26 @@ class CompleteFlight(Base):
         x_opt, u_opt = output(self.solution["x"])
 
         df = self.to_trajectory(ts_final, x_opt, u_opt)
+        df_copy = df.copy()
 
         # check if the optimizer has failed due to too short flight distance
         if df.altitude.max() < 5000:
-            RuntimeWarning("optimization seems to have failed.")
+            warnings.warn("optimization seems to have failed.")
             return None
 
-        if df.mass.iloc[-1] < self.oew or df.mass.iloc[-1] > self.mlw:
-            RuntimeWarning("final mass condition violated.")
-            return None
-
-        # check final mass, which should be larger than OEW, and smaller than MLW
         if df is not None:
             final_mass = df.mass.iloc[-1]
-            if final_mass < self.oew or final_mass > self.mlw:
-                RuntimeWarning(
-                    "optimization failed, final mass smaller than OEW or larger than MLW."
-                )
 
-                if not return_failed:
-                    df = None
+            if final_mass < self.oew:
+                warnings.warn("final mass condition violated (smaller than OEW).")
+                df = None
+
+            if final_mass > self.mlw:
+                warnings.warn("final mass condition violated (larger than MLW).")
+                df = None
+
+        if return_failed:
+            return df_copy
 
         return df
 
