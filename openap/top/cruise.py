@@ -6,8 +6,6 @@ import openap.casadi as oc
 import pandas as pd
 from openap.extra.aero import fpm, ft, kts
 
-import openap
-
 from .base import Base
 
 
@@ -188,22 +186,27 @@ class Cruise(Base):
 
         # aircraft performane constraints
         for k in range(1, self.nodes):
-            # max_thrust > drag
+            S = self.aircraft["wing"]["area"]
+            mass = X[k][3]
             v = oc.aero.mach2tas(U[k][0], X[k][2])
             tas = v / kts
             alt = X[k][2] / ft
+            rho = oc.aero.density(X[k][2])
+            thrust_max = self.thrust.cruise(tas, alt)
 
-            # max thrut at given tas, important
-            Tmax = self.thrust.cruise(tas, alt)
-
-            g.append(Tmax - self.drag.clean(X[k][3], tas, alt))
+            # max_thrust * 95% > drag (5% margin)
+            g.append(thrust_max * 0.95 - self.drag.clean(mass, tas, alt))
             lbg.append([0])
             ubg.append([ca.inf])
 
-            # max lift > weight
-            rho = oc.aero.density(X[k][2])
-            S = self.aircraft["wing"]["area"]
-            g.append(1.4 * 0.5 * rho * v**2 * S - X[k][3] * oc.aero.g0)
+            # max lift * 80% > weight (20% margin)
+            drag_max = thrust_max * 0.9
+            cd_max = drag_max / (0.5 * rho * v**2 * S)
+            cd0 = self.drag.polar["clean"]["cd0"]
+            ck = self.drag.polar["clean"]["k"]
+            cl_max = ca.sqrt((cd_max - cd0) / ck)
+            L_max = cl_max * 0.5 * rho * v**2 * S
+            g.append(L_max * 0.8 - mass * oc.aero.g0)
             lbg.append([0])
             ubg.append([ca.inf])
 

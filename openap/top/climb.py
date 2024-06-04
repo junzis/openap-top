@@ -6,8 +6,6 @@ import openap.casadi as oc
 import pandas as pd
 from openap.extra.aero import fpm, ft, kts
 
-import openap
-
 from .base import Base
 from .cruise import Cruise
 

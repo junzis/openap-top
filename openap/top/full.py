@@ -214,15 +214,6 @@ class CompleteFlight(Base):
                 lbg.append([15000 * ft])
                 ubg.append([ca.inf])
 
-                # # lift > weight
-                # mass = X[k][3]
-                # tas = oc.aero.mach2tas(U[k][0], X[k][2]) / kts
-                # alt = X[k][2] / ft
-                # cl = self.drag._cl(mass, tas, alt)
-                # g.append(cl)
-                # lbg.append([0])
-                # ubg.append([0.5])
-
             for k in range(0, idx_toc):
                 g.append(U[k][1])
                 lbg.append([0])
@@ -260,7 +251,7 @@ class CompleteFlight(Base):
             lbg.append([0])
             ubg.append([ca.inf])
 
-        # constrain time and dt
+        # ts and dt should be consistent
         for k in range(1, self.nodes):
             g.append(X[k][4] - X[k - 1][4] - self.dt)
             lbg.append([-1])
