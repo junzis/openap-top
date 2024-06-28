@@ -21,6 +21,9 @@ openap = "^2.0"
 casadi = ">=3.6"
 pyproj = ">=3.4"
 cfgrib = ">=0.9.9"
+ecmwflibs = ">=0.6"
+scikit-learn = ">=1.4.0"
+cartopy = ">=0.23.0"
 
 [build-system]
 requires = ["poetry-core"]
