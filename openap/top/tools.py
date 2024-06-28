@@ -1,24 +1,19 @@
 import casadi as ca
-import cfgrib
-import pandas as pd
+import xarray as xr
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import PolynomialFeatures
 
+import pandas as pd
 from openap import aero
 
 
 def read_grib(fgrib):
     df = (
-        cfgrib.open_dataset(
-            fgrib,
-            backend_kwargs={
-                "filter_by_keys": {"typeOfLevel": "isobaricInhPa"},
-                "indexpath": "",
-            },
-        )
+        xr.open_dataset(fgrib, engine="cfgrib")
         .to_dataframe()
         .reset_index()
+        .drop(columns=["step", "valid_time"])
         .assign(longitude=lambda d: (d.longitude + 180) % 360 - 180)
         .assign(h=lambda d: aero.h_isa(d.isobaricInhPa * 100))
     )
