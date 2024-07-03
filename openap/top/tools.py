@@ -39,7 +39,7 @@ class PolyWind:
         df = df.assign(x=x, y=y)
 
         model = make_pipeline(PolynomialFeatures(2), Ridge())
-        model.fit(df[["x", "y", "h"]], df[["u", "v"]])
+        model.fit(df[["x", "y", "h", "ts"]], df[["u", "v"]])
 
         features = model["polynomialfeatures"].get_feature_names_out()
         features = [string.replace("^", "**") for string in features]
@@ -48,19 +48,19 @@ class PolyWind:
         self.features = features
         self.coef_u, self.coef_v = model["ridge"].coef_
 
-    def calc_u(self, x, y, h):
+    def calc_u(self, x, y, h, ts):
         u = sum(
             [
-                eval(f, {}, {"x": x, "y": y, "h": h}) * c
+                eval(f, {}, {"x": x, "y": y, "h": h, "ts": ts}) * c
                 for (f, c) in zip(self.features, self.coef_u)
             ]
         )
         return u
 
-    def calc_v(self, x, y, h):
+    def calc_v(self, x, y, h, ts):
         v = sum(
             [
-                eval(f, {}, {"x": x, "y": y, "h": h}) * c
+                eval(f, {}, {"x": x, "y": y, "h": h, "ts": ts}) * c
                 for (f, c) in zip(self.features, self.coef_v)
             ]
         )

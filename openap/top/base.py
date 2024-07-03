@@ -3,6 +3,7 @@ from math import pi
 from typing import Callable, Union
 
 import casadi as ca
+
 import numpy as np
 import openap
 import openap.casadi as oc
@@ -191,11 +192,11 @@ class Base:
 
         dx = v * ca.sin(psi) * ca.cos(gamma)
         if self.wind is not None:
-            dx += self.wind.calc_u(xp, yp, h)
+            dx += self.wind.calc_u(xp, yp, h, ts)
 
         dy = v * ca.cos(psi) * ca.cos(gamma)
         if self.wind is not None:
-            dy += self.wind.calc_v(xp, yp, h)
+            dy += self.wind.calc_v(xp, yp, h, ts)
 
         dh = vs
 
@@ -431,8 +432,8 @@ class Base:
         )
 
         if self.wind:
-            wu = self.wind.calc_u(xp, yp, h)
-            wv = self.wind.calc_v(xp, yp, h)
+            wu = self.wind.calc_u(xp, yp, h, ts)
+            wv = self.wind.calc_v(xp, yp, h, ts)
             df = df.assign(wu=wu, wv=wv)
 
         func_objs = []
