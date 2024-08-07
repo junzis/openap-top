@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openap-top"
-version = "1.4"
+version = "1.5"
 description = "Trajectory OPtimizer using OpenAP"
 authors = ["Junzi Sun <j.sun-1@tudelft.nl>"]
 license = "GNU Lesser General Public License v3 (LGPLv3)"
