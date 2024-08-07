@@ -1,9 +1,12 @@
+from typing import Optional
+
 import casadi as ca
 import xarray as xr
 from sklearn.linear_model import Ridge
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import PolynomialFeatures
 
+import numpy as np
 import pandas as pd
 from openap import aero
 
@@ -67,6 +70,19 @@ class PolyWind:
         return v
 
 
-def interp_grid(Lon, Lat, H, T, V, shape="linear"):
-    interpolant = ca.interpolant("grid_cost", shape, [Lon, Lat, H, T], V)
-    return interpolant
+def interp_grid(
+    longitude: np.array,
+    latitude: np.array,
+    height: np.array,
+    grid_value: np.array,
+    timestamp: Optional[np.array] = None,
+    shape: str = "linear",
+):
+    if timestamp is None:
+        return ca.interpolant(
+            "grid_cost", shape, [longitude, latitude, height], grid_value
+        )
+    else:
+        return ca.interpolant(
+            "grid_cost", shape, [longitude, latitude, height, timestamp], grid_value
+        )

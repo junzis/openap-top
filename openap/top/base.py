@@ -365,12 +365,25 @@ class Base:
         interpolant = kwargs.get("interpolant", None)
         symbolic = kwargs.get("symbolic", True)
 
+        ndim = kwargs.get("ndim", 3)
+        assert ndim in [3, 4]
+
         lon, lat = self.proj(xp, yp, inverse=True, symbolic=symbolic)
 
-        if symbolic:
-            cost = interpolant(ca.vertcat(lon, lat, h, ts))
+        if ndim == 3:
+            input_data = [lon, lat, h]
         else:
-            cost = interpolant(np.array([lon, lat, h, ts])).full()[0]
+            input_data = [lon, lat, h, ts]
+
+        if symbolic:
+            input_data = ca.vertcat(*input_data)
+        else:
+            input_data = np.array(input_data)
+
+        cost = interpolant(input_data)
+
+        if not symbolic:
+            cost = cost.full()[0]
 
         return cost
 
@@ -415,20 +428,21 @@ class Base:
         lon, lat = self.proj(xp, yp, inverse=True)
         ts_ = np.linspace(0, ts_final, n).round()
 
-        df = (
-            pd.DataFrame()
-            .assign(ts=ts_)
-            .assign(x=xp)
-            .assign(y=yp)
-            .assign(h=h)
-            .assign(latitude=lat)
-            .assign(longitude=lon)
-            .assign(altitude=(h / ft).round())
-            .assign(mach=mach.round(4))
-            .assign(tas=(openap.aero.mach2tas(mach, h) / kts).round(2))
-            .assign(vertical_rate=(vs / fpm).round())
-            .assign(heading=(np.rad2deg(psi) % 360).round(2))
-            .assign(mass=mass.round())
+        df = pd.DataFrame(
+            dict(
+                ts=ts_,
+                x=xp,
+                y=yp,
+                h=h,
+                latitude=lat,
+                longitude=lon,
+                altitude=(h / ft).round(),
+                mach=mach.round(4),
+                tas=(openap.aero.mach2tas(mach, h) / kts).round(2),
+                vertical_rate=(vs / fpm).round(),
+                heading=(np.rad2deg(psi) % 360).round(2),
+                mass=mass.round(),
+            )
         )
 
         if self.wind:
