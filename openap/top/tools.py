@@ -78,6 +78,22 @@ def interp_grid(
     timestamp: Optional[np.array] = None,
     shape: str = "linear",
 ):
+    """
+    Interpolates grid values based on the given longitude, latitude, height,
+        timestamp, and grid_value arrays.
+    Parameters:
+        longitude (np.array): Array of longitudes.
+        latitude (np.array): Array of latitudes.
+        height (np.array): Array of heights (in meters).
+        grid_value (np.array): Array of grid values.
+        timestamp (Optional[np.array], optional): Array of timestamps. Defaults to None.
+        shape (str, optional): Interpolation shape. Defaults to "linear".
+    Returns:
+        ca.interpolant: Interpolant object representing the interpolated grid values.
+    """
+
+    assert shape in ["linear", "bspline"]
+
     if timestamp is None:
         return ca.interpolant(
             "grid_cost", shape, [longitude, latitude, height], grid_value

@@ -359,18 +359,36 @@ class Base:
         return cost * dt
 
     def obj_grid_cost(self, x, u, dt, **kwargs):
+        """
+        Calculate the cost of the grid object.
+        Parameters:
+        - x (list): List of state variables [xp, yp, h, m, ts].
+        - u (list): List of control variables [mach, vs, psi].
+        - dt (float): Time step.
+        - **kwargs (dict): Additional keyword arguments.
+            - interpolant (function): Interpolant function.
+            - symbolic (bool): Flag indicating whether to use symbolic computation.
+            - n_dim (int): Dimension of the input data (3 or 4), default to 3.
+            - time_dependent (bool): Flag indicating whether the cost is time dependent
+                the cost will multiplied by dt if true.
+        Returns:
+        - cost (float): The calculated cost.
+        Raises:
+        - AssertionError: If n_dim is not 3 or 4.
+        """
+
         xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
         mach, vs, psi = u[0], u[1], u[2]
 
         interpolant = kwargs.get("interpolant", None)
         symbolic = kwargs.get("symbolic", True)
-
-        ndim = kwargs.get("ndim", 3)
-        assert ndim in [3, 4]
+        n_dim = kwargs.get("n_dim", 3)
+        time_dependent = kwargs.get("time_dependent", True)
+        assert n_dim in [3, 4]
 
         lon, lat = self.proj(xp, yp, inverse=True, symbolic=symbolic)
 
-        if ndim == 3:
+        if n_dim == 3:
             input_data = [lon, lat, h]
         else:
             input_data = [lon, lat, h, ts]
@@ -384,6 +402,9 @@ class Base:
 
         if not symbolic:
             cost = cost.full()[0]
+
+        if time_dependent:
+            cost *= dt
 
         return cost
 
