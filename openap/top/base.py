@@ -434,9 +434,11 @@ class Base:
         X = x_opt.full()
         U = u_opt.full()
 
+        # Extrapolate the final control point, Uf
         U2 = U[:, -2:-1]
         U1 = U[:, -1:]
         Uf = U1 + (U1 - U2)
+
         U = np.append(U, Uf, axis=1)
         n = self.nodes + 1
 
@@ -471,17 +473,33 @@ class Base:
             wv = self.wind.calc_v(xp, yp, h, ts)
             df = df.assign(wu=wu, wv=wv)
 
-        func_objs = []
-        for func in dir(self):
-            if "obj_fuel" in func:
-                func_objs.append(func)
+        fuelflow = openap.FuelFlow(
+            self.actype,
+            self.engtype,
+            use_synonym=self.use_synonym,
+            force_engine=True,
+        )
 
-            if climate_metrics and (("obj_gwp" in func) or ("obj_gtp" in func)):
-                func_objs.append(func)
+        fuel_ = []
+        mass_ = []
+        mass = self.initial_mass
+        for i, row in df.iterrows():
+            fuel = self.dt * fuelflow.enroute(
+                row["mass"], row["tas"], row["altitude"], row["vertical_rate"]
+            )
+            mass_.append(mass)
+            fuel_.append(fuel)
+            mass -= fuel
 
-        dt = ts_final / self.nodes
+        df = df.assign(fuel=fuel_, mass=mass_)
 
-        for fo in func_objs:
-            df[fo.replace("obj_", "")] = getattr(self, fo)(X, U, dt, symbolic=False)
+        if climate_metrics:
+            func_objs = []
+            for func in dir(self):
+                if ("obj_gwp" in func) or ("obj_gtp" in func):
+                    func_objs.append(func)
+
+            for fo in func_objs:
+                df[fo] = getattr(self, fo)(X, U, self.dt, symbolic=False)
 
         return df

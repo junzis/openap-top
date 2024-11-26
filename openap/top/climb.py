@@ -1,6 +1,7 @@
 from math import pi
 
 import casadi as ca
+
 import numpy as np
 import openap.casadi as oc
 import pandas as pd
@@ -30,7 +31,7 @@ class Climb(Base):
 
         mass_0 = self.initial_mass
         mass_oew = self.aircraft["limits"]["OEW"]
-        h_min = 3000 * ft
+        h_min = 100 * ft
         h_toc = df_cruise.h.iloc[0]
         cruise_mach = df_cruise.mach.iloc[0]
         self.traj_range = self.wrap.climb_range()["maximum"] * 1000 * 1.5
@@ -74,7 +75,6 @@ class Climb(Base):
         self.u_guess = [0.2, 1500 * fpm, od_psi]
 
     def trajectory(self, objective="fuel", df_cruise=None, **kwargs) -> pd.DataFrame:
-
         if self.debug:
             ipopt_print = 5
             print_time = 1
@@ -279,5 +279,7 @@ class Climb(Base):
         x_opt, u_opt = output(self.solution["x"])
 
         df = self.to_trajectory(ts_final, x_opt, u_opt)
+
+        df = df.query("vertical_rate > 100")
 
         return df

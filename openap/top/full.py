@@ -3,6 +3,7 @@ from collections.abc import Iterable
 from math import pi
 
 import casadi as ca
+
 import numpy as np
 import openap
 import openap.casadi as oc
@@ -40,7 +41,7 @@ class CompleteFlight(Base):
         mach_max = self.aircraft["limits"]["MMO"]
         mass_oew = self.aircraft["limits"]["OEW"]
         h_max = self.aircraft["limits"]["ceiling"]
-        h_min = 1500 * ft
+        h_min = 100 * ft
         hdg = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
         psi = hdg * pi / 180
         mass_init = self.initial_mass
@@ -226,7 +227,6 @@ class CompleteFlight(Base):
 
         # aircraft performance constraints
         for k in range(1, self.nodes):
-
             S = self.aircraft["wing"]["area"]
             mass = X[k][3]
             v = oc.aero.mach2tas(U[k][0], X[k][2])

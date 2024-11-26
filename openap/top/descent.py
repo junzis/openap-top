@@ -1,12 +1,12 @@
 from math import pi
 
 import casadi as ca
+
 import numpy as np
+import openap
 import openap.casadi as oc
 import pandas as pd
 from openap.extra.aero import fpm, ft, kts
-
-import openap
 
 from .base import Base
 from .cruise import Cruise
@@ -20,7 +20,7 @@ class Descent(Base):
     def init_conditions(self, df_cruise):
         """Initialize direct collocation bounds and guesses."""
 
-        h_min = 3000 * ft
+        h_min = 100 * ft
         h_tod = df_cruise.h.iloc[-1]
         psi_tod = df_cruise.heading.iloc[-1] * pi / 180
         od_bearing = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
@@ -77,7 +77,6 @@ class Descent(Base):
         self.u_guess = [0.7, -1500 * fpm, psi_tod]
 
     def trajectory(self, objective="fuel", df_cruise=None, **kwargs) -> pd.DataFrame:
-
         if self.debug:
             ipopt_print = 5
             print_time = 1
