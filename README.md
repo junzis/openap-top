@@ -2,7 +2,7 @@
 
 This repository contains the flight trajectory optimizer module of [OpenAP](https://github.com/junzis/openap).
 
-A more detailed user guide can be found at: https://openap.dev/top.
+A more detailed user guide can be found at: https://openap.dev/optimize.html.
 
 ## Install
 
