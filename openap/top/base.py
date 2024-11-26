@@ -24,6 +24,7 @@ class Base:
         origin: Union[str, tuple],
         destination: Union[str, tuple],
         m0: float = 0.8,
+        dT: float = 0,
         use_synonym=False,
     ):
         """OpenAP trajectory optimizer.
@@ -33,6 +34,7 @@ class Base:
             origin (Union[str, tuple]): ICAO or IATA code of airport, or tuple (lat, lon)
             destination (Union[str, tuple]): ICAO or IATA code of airport, or tuple (lat, lon)
             m0 (float, optional): Takeoff mass factor. Defaults to 0.8 (of MTOW).
+            dT (float, optional): Sea-level temperature shift. Default is 0 which is equivalent to 288.15K sea-level temperature.
         """
         if isinstance(origin, str):
             ap1 = openap.nav.airport(origin)
@@ -56,7 +58,7 @@ class Base:
         self.mlw = self.aircraft["limits"]["MLW"]
 
         self.use_synonym = use_synonym
-
+        self.dT = dT
         self.thrust = oc.Thrust(actype, use_synonym=self.use_synonym)
         self.wrap = openap.WRAP(actype, use_synonym=self.use_synonym)
         self.drag = oc.Drag(actype, wave_drag=True, use_synonym=self.use_synonym)
@@ -187,7 +189,7 @@ class Base:
         xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
         mach, vs, psi = u[0], u[1], u[2]
 
-        v = oc.aero.mach2tas(mach, h)
+        v = oc.aero.mach2tas(mach, h, self.dT)
         gamma = ca.arctan2(vs, v)
 
         dx = v * ca.sin(psi) * ca.cos(gamma)
@@ -267,7 +269,7 @@ class Base:
         if symbolic:
             fuelflow = self.fuelflow
             emission = self.emission
-            v = oc.aero.mach2tas(mach, h)
+            v = oc.aero.mach2tas(mach, h, self.dT)
         else:
             fuelflow = openap.FuelFlow(
                 self.actype, self.engtype, polydeg=2, use_synonym=self.use_synonym
@@ -275,7 +277,7 @@ class Base:
             emission = openap.Emission(
                 self.actype, self.engtype, use_synonym=self.use_synonym
             )
-            v = openap.aero.mach2tas(mach, h)
+            v = openap.aero.mach2tas(mach, h, self.dT)
 
         ff = fuelflow.enroute(m, v / kts, h / ft, vs / fpm, limit=False)
         co2 = emission.co2(ff)
@@ -292,7 +294,7 @@ class Base:
 
         if symbolic:
             fuelflow = self.fuelflow
-            v = oc.aero.mach2tas(mach, h)
+            v = oc.aero.mach2tas(mach, h, self.dT)
         else:
             fuelflow = openap.FuelFlow(
                 self.actype,
@@ -300,7 +302,7 @@ class Base:
                 use_synonym=self.use_synonym,
                 force_engine=True,
             )
-            v = openap.aero.mach2tas(mach, h)
+            v = openap.aero.mach2tas(mach, h, self.dT)
 
         ff = fuelflow.enroute(m, v / kts, h / ft, vs / fpm, limit=False)
         return ff * dt

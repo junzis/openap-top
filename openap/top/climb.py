@@ -206,8 +206,8 @@ class Climb(Base):
             hk = X[k][2]
             hk1 = X[k + 1][2]
             vs = U[k][1]
-            vk = oc.aero.mach2tas(U[k][0], hk)
-            vk1 = oc.aero.mach2tas(U[k + 1][0], hk1)
+            vk = oc.aero.mach2tas(U[k][0], hk, self.dT)
+            vk1 = oc.aero.mach2tas(U[k + 1][0], hk1, self.dT)
             dvdt = (vk1 - vk) / self.dt
             dhdt = (hk1 - hk) / self.dt
             thrust_max = self.thrust.climb(0, hk / ft, 0)
