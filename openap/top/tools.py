@@ -11,19 +11,40 @@ import pandas as pd
 from openap import aero
 
 
-def read_grib(fgrib):
+def read_grids(paths: str | list[str], engine=None) -> pd.DataFrame:
+    """
+    Parameters:
+    paths (str or list of str): The paths can be a single path or a list of paths.
+        You must ensure the file with the lowest `time` value corresponds to the
+        take-off time of your flight.
+    engine (str, optional): The engine to use for reading the grib files.
+        Defaults to None. Options are 'cfgrib' and 'netcdf4', etc.
+
+    Returns:
+    pd.DataFrame: A pandas DataFrame containing the data from the grib files.
+
+    The DataFrame includes the following transformations:
+    - Adjusts the 'longitude' column to be within the range [-180, 180].
+    - Adds a column 'h' calculated using the 'isobaricInhPa' column.
+    - Adds a column 'ts' representing the total seconds from the minimum time.
+    """
     df = (
-        xr.open_dataset(fgrib, engine="cfgrib")
+        xr.open_mfdataset(paths, engine=engine)
         .to_dataframe()
         .reset_index()
         .drop(columns=["step", "valid_time"])
         .assign(longitude=lambda d: (d.longitude + 180) % 360 - 180)
         .assign(h=lambda d: aero.h_isa(d.isobaricInhPa * 100))
+        .assign(ts=lambda d: (d.time - d.time.min()).dt.total_seconds())
     )
     return df
 
 
 class PolyWind:
+    """
+    A class to model wind fields using second order polynomial regression.
+    """
+
     def __init__(self, windfield: pd.DataFrame, proj, lat1, lon1, lat2, lon2, margin=5):
         self.wind = windfield
 
@@ -33,8 +54,7 @@ class PolyWind:
             .query(f"longitude >= {(min(lon1, lon2)) - margin}")
             .query(f"latitude <= {max(lat1, lat2) + margin}")
             .query(f"latitude >= {min(lat1, lat2) - margin}")
-            .query(f"h >= 5000")
-            .query(f"h <= 13000")
+            .query("h <= 13000")
         )
 
         x, y = proj(df.longitude, df.latitude)
@@ -79,8 +99,11 @@ def interp_grid(
     shape: str = "linear",
 ):
     """
-    Interpolates grid values based on the given longitude, latitude, height,
+    This function is used to create the 3d or 4d grid based cost function.
+
+    It interpolates grid values based on the given longitude, latitude, height,
         timestamp, and grid_value arrays.
+
     Parameters:
         longitude (np.array): Array of longitudes.
         latitude (np.array): Array of latitudes.
@@ -88,8 +111,9 @@ def interp_grid(
         grid_value (np.array): Array of grid values.
         timestamp (Optional[np.array], optional): Array of timestamps. Defaults to None.
         shape (str, optional): Interpolation shape. Defaults to "linear".
+
     Returns:
-        ca.interpolant: Interpolant object representing the interpolated grid values.
+        ca.interpolant: Casadi interpolant object representing the grid values.
     """
 
     assert shape in ["linear", "bspline"]

@@ -1,17 +1,17 @@
 import warnings
 
 import matplotlib.pyplot as plt
-import numpy as np
 from cartopy import crs as ccrs
 from cartopy.feature import BORDERS, LAND, OCEAN
 from matplotlib.gridspec import GridSpec
 
+import numpy as np
 from openap import aero
 
 warnings.filterwarnings("ignore")
 
 
-def map(df, windfield=None, ax=None, wind_sample=4):
+def map(df, windfield=None, ax=None, wind_sample=10):
     lat1, lon1 = df.latitude.iloc[0], df.longitude.iloc[0]
     lat2, lon2 = df.latitude.iloc[-1], df.longitude.iloc[-1]
 
