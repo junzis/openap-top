@@ -2,13 +2,17 @@
 
 This repository contains the flight trajectory optimizer module based on the [OpenAP](https://github.com/junzis/openap) package. 
 
-This tool uses non-linear optimal control direct collocation algorithms from the `casadi` library. It provides simple interfaces to generate different optimal trajectories. For example, you can use this tool to generate any of the following trajectories (or combinations thereof):
+This tool uses non-linear optimal control direct collocation algorithms from the `casadi` library. It provides simple interfaces to generate different optimal trajectories. For example, this tool can generate any of the following trajectories (or combinations thereof):
 
-- Complete flight trajectories or flight segments
+- Complete flight trajectories or flight segments at different flight phase
 - Fuel-optimal trajectories
 - Wind-optimal trajectories
 - Cost index optimized trajectories
 - Trajectories optimized using customized 4D cost functions (contrails, weather)
+- Flight trajectories with constraint altitude, constant mach number, etc.
+
+What's more, you can also design your own objective functions and constraints to optimize the flight trajectory.
+
 
 ## 🕮 User Guide
 
@@ -46,7 +50,7 @@ optimizer = top.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
 flight = optimizer.trajectory(objective="fuel")
 ```
 
-You can specify different objective functions as:
+Other predefined objective functions are available, for example:
 
 ```python
 # Cost index 30 (out of max 100)
@@ -65,25 +69,28 @@ The final `flight` object is a Pandas DataFrame. Here is an example:
 
 ### Using Wind Data
 
-To include wind in your optimization, first download meteorological data in `grib` format from ECMWF, such as the ERA5 reanalysis data.
+To include wind in our optimization, first download meteorological data in `grib` format from ECMWF, such as the ERA5 reanalysis data.
 
-Once you have the grid files, you can read and enable wind for your optimizer with this example code:
+Once grid files are ready, we can read and enable wind for our optimizer with this example code:
 
 ```python
 from openap import top
 
-optimizer = top.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
 
 fgrib = "path_to_the_wind_data.grib"
 windfield = top.tools.read_grids(fgrib)
+
+optimizer = top.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
 optimizer.enable_wind(windfield)
 
-flight = optimizer.trajectory(objective="fuel")
+flight = optimizer.trajectory() # default objective is fuel
 ```
 
-If your grib file includes multiple timestamps, ensure you filter the correct time in the `windfield` object (pandas DataFrame).
+Next, we can visualize the trajectory with wind barbs:
 
-### Example of an optimal flight:
+```
+top.vis.trajectory(flight, windfield=windfield, barb_steps=15)
+```
 
 ![example_optimal_flight](./docs/_static/optimal_flight_complete_example.png)
 
