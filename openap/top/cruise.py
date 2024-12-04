@@ -1,6 +1,7 @@
 from math import pi
 
 import casadi as ca
+
 import numpy as np
 import openap.casadi as oc
 import pandas as pd
@@ -78,14 +79,6 @@ class Cruise(Base):
         self.u_guess = [0.7, 0, hdg * pi / 180]
 
     def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
-        if self.debug:
-            print("Calculating optimal cruise trajectory...")
-            ipopt_print = 5
-            print_time = 1
-        else:
-            ipopt_print = 0
-            print_time = 0
-
         self.init_conditions(**kwargs)
         self.init_model(objective, **kwargs)
 
@@ -201,10 +194,10 @@ class Cruise(Base):
 
             # max lift * 80% > weight (20% margin)
             drag_max = thrust_max * 0.9
-            cd_max = drag_max / (0.5 * rho * v**2 * S)
+            cd_max = drag_max / (0.5 * rho * v**2 * S + 1e-10)
             cd0 = self.drag.polar["clean"]["cd0"]
             ck = self.drag.polar["clean"]["k"]
-            cl_max = ca.sqrt((cd_max - cd0) / ck)
+            cl_max = ca.sqrt(ca.fmax(1e-10, (cd_max - cd0) / ck))
             L_max = cl_max * 0.5 * rho * v**2 * S
             g.append(L_max * 0.8 - mass * oc.aero.g0)
             lbg.append([0])
@@ -273,13 +266,7 @@ class Cruise(Base):
         # Create an NLP solver
         nlp = {"f": J, "x": w, "g": g}
 
-        opts = {
-            "ipopt.print_level": ipopt_print,
-            "ipopt.sb": "yes",
-            "print_time": print_time,
-            "ipopt.max_iter": self.ipopt_max_iter,
-        }
-        self.solver = ca.nlpsol("solver", "ipopt", nlp, opts)
+        self.solver = ca.nlpsol("solver", "ipopt", nlp, self.solver_options)
         self.solution = self.solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
 
         # final timestep

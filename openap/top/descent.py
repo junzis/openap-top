@@ -285,13 +285,7 @@ class Descent(Base):
         # Create an NLP solver
         nlp = {"f": J, "x": w, "g": g}
 
-        opts = {
-            "ipopt.print_level": ipopt_print,
-            "ipopt.sb": "yes",
-            "print_time": print_time,
-            "ipopt.max_iter": self.ipopt_max_iter,
-        }
-        self.solver = ca.nlpsol("solver", "ipopt", nlp, opts)
+        self.solver = ca.nlpsol("solver", "ipopt", nlp, self.solver_options)
 
         self.solution = self.solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
 

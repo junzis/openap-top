@@ -90,7 +90,7 @@ class PolyWind:
         return v
 
 
-def interp_grid(
+def construct_interpolant(
     longitude: np.array,
     latitude: np.array,
     height: np.array,
@@ -118,6 +118,12 @@ def interp_grid(
 
     assert shape in ["linear", "bspline"]
 
+    if max(height) > 20_000:
+        raise Warning(
+            """Grid contains heights above 20,000 meters. You 'height' might be feet
+            Make sure the 'height' values are in meters."""
+        )
+
     if timestamp is None:
         return ca.interpolant(
             "grid_cost", shape, [longitude, latitude, height], grid_value
@@ -125,4 +131,59 @@ def interp_grid(
     else:
         return ca.interpolant(
             "grid_cost", shape, [longitude, latitude, height, timestamp], grid_value
+        )
+
+
+def interp_grid(
+    longitude, latitude, height, grid_value, timestamp=None, shape="linear"
+):
+    raise DeprecationWarning(
+        "Function interp_grid() is deprecated, "
+        "use interpolant_from_dataframe() instead."
+    )
+
+
+def interpolant_from_dataframe(
+    df: pd.DataFrame, shape: str = "linear"
+) -> ca.interpolant:
+    """
+    This function is used to create the 3d or 4d grid based cost function.
+
+    It interpolates grid values based on the given DataFrame. The DataFrame must
+    contain columns 'longitude', 'latitude', 'height' (meters), and 'cost'.
+
+    If the DataFrame contains a 'ts' column, it will be used as the timestamp,
+    and the grid will be treated as 4d.
+
+    Parameters:
+        df (pd.DataFrame): DataFrame containing the grid values.
+        shape (str, optional): Interpolation shape. Defaults to "linear".
+
+    Returns:
+        ca.interpolant: Casadi interpolant object representing the grid values.
+    """
+
+    assert shape in ["linear", "bspline"], "Shape must be 'linear' or 'bspline'"
+    assert "longitude" in df.columns, "Missing 'longitude' column in DataFrame"
+    assert "latitude" in df.columns, "Missing 'latitude' column in DataFrame"
+    assert "height" in df.columns, "Missing 'height' column in DataFrame"
+
+    df = df.sort_values(["height", "latitude", "longitude"], ascending=True)
+
+    if "ts" in df.columns:
+        return construct_interpolant(
+            df.longitude.unique(),
+            df.latitude.unique(),
+            df.height.unique(),
+            df.cost.values,
+            df.ts.values,
+            shape=shape,
+        )
+    else:
+        return construct_interpolant(
+            df.longitude.unique(),
+            df.latitude.unique(),
+            df.height.unique(),
+            df.cost.values,
+            shape=shape,
         )

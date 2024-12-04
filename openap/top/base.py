@@ -80,11 +80,10 @@ class Base:
         self.range = oc.aero.distance(self.lat1, self.lon1, self.lat2, self.lon2)
         max_range = self.wrap.cruise_range()["maximum"] * 1.2
         if self.range > max_range * 1000:
-            warnings.warn(f"The destination is likely out of maximum cruise range.")
+            warnings.warn("The destination is likely out of maximum cruise range.")
 
         self.debug = False
-
-        self.setup_dc()
+        self.setup()
 
     def proj(self, lon, lat, inverse=False, symbolic=False):
         lat0 = (self.lat1 + self.lat2) / 2
@@ -140,35 +139,35 @@ class Base:
         self.emission = oc.Emission(self.actype, engtype, use_synonym=self.use_synonym)
 
     def collocation_coeff(self):
-        # Get collocation points
+        # Get collocation points using Legendre polynomials
         tau_root = np.append(0, ca.collocation_points(self.polydeg, "legendre"))
 
-        # Coefficients of the collocation equation
+        # C[i,j] = time derivative of Lagrange polynomial i evaluated at collocation point j
         C = np.zeros((self.polydeg + 1, self.polydeg + 1))
 
-        # Coefficients of the continuity equation
+        # D[j] = Lagrange polynomial j evaluated at final time (t=1)
         D = np.zeros(self.polydeg + 1)
 
-        # Coefficients of the quadrature function
+        # B[j] = integral of Lagrange polynomial j from 0 to 1
         B = np.zeros(self.polydeg + 1)
 
-        # Construct polynomial basis
+        # For each collocation point, construct Lagrange polynomial and calculate coefficients
         for j in range(self.polydeg + 1):
-            # Construct Lagrange polynomials to get the polynomial basis at the collocation point
+            # Construct Lagrange polynomial that is 1 at tau_root[j] and 0 at tau_root[r] where r != j
             p = np.poly1d([1])
             for r in range(self.polydeg + 1):
                 if r != j:
                     p *= np.poly1d([1, -tau_root[r]]) / (tau_root[j] - tau_root[r])
 
-            # Evaluate the polynomial at the final time to get the coefficients of the continuity equation
+            # Evaluate polynomial at t=1 for continuity constraints
             D[j] = p(1.0)
 
-            # Evaluate the time derivative of the polynomial at all collocation points to get the coefficients of the continuity equation
+            # Get time derivative coefficients for collocation constraints
             pder = np.polyder(p)
             for r in range(self.polydeg + 1):
                 C[j, r] = pder(tau_root[r])
 
-            # Evaluate the integral of the polynomial to get the coefficients of the quadrature function
+            # Get integral coefficients for cost function quadrature
             pint = np.polyint(p)
             B[j] = pint(1.0)
 
@@ -206,10 +205,37 @@ class Base:
 
         return ca.vertcat(dx, dy, dh, dm, dt)
 
-    def setup_dc(self, nodes=40, polydeg=3, max_iteration=1000):
+    def setup(self, nodes=40, polydeg=3, debug=False, **kwargs):
         self.nodes = nodes
         self.polydeg = polydeg
-        self.ipopt_max_iter = max_iteration
+
+        max_iteration = kwargs.get("max_iteration", 5000)
+        tol = kwargs.get("tol", 1e-6)
+        acceptable_tol = kwargs.get("acceptable_tol", 1e-4)
+
+        self.debug = debug
+
+        if debug:
+            print("Calculating optimal cruise trajectory...")
+            ipopt_print = 5
+            print_time = 1
+        else:
+            ipopt_print = 0
+            print_time = 0
+
+        self.solver_options = {
+            "print_time": print_time,
+            "calc_lam_p": False,
+            "ipopt.print_level": ipopt_print,
+            "ipopt.sb": "yes",
+            "ipopt.max_iter": max_iteration,
+            "ipopt.fixed_variable_treatment": "relax_bounds",
+            "ipopt.tol": tol,
+            "ipopt.acceptable_tol": acceptable_tol,
+            "ipopt.mu_strategy": "adaptive",
+            "ipopt.alpha_for_y": "primal-and-full",
+            "ipopt.hessian_approximation": "limited-memory",
+        }
 
     def init_model(self, objective, **kwargs):
         # Model variables
