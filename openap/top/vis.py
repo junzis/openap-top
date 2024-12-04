@@ -11,7 +11,7 @@ from openap import aero
 warnings.filterwarnings("ignore")
 
 
-def map(df, windfield=None, ax=None, wind_sample=10):
+def map(df, windfield=None, ax=None, barb_steps=10):
     lat1, lon1 = df.latitude.iloc[0], df.longitude.iloc[0]
     lat2, lon2 = df.latitude.iloc[-1], df.longitude.iloc[-1]
 
@@ -35,9 +35,9 @@ def map(df, windfield=None, ax=None, wind_sample=10):
 
     if windfield is not None:
         # get the closed altitude
-        h_max = df.altitude.max() * aero.ft
-        fl = int(round(h_max / aero.ft / 100, -1))
-        idx = np.argmin(abs(windfield.h.unique() - h_max))
+        h_median = df.altitude.median() * aero.ft
+        fl = int(round(h_median / aero.ft / 100, -1))
+        idx = np.argmin(abs(windfield.h.unique() - h_median))
         df_wind = (
             windfield.query(f"h=={windfield.h.unique()[idx]}")
             .query(f"longitude <= {lonmax + 2}")
@@ -47,10 +47,10 @@ def map(df, windfield=None, ax=None, wind_sample=10):
         )
 
         ax.barbs(
-            df_wind.longitude.values[::wind_sample],
-            df_wind.latitude.values[::wind_sample],
-            df_wind.u.values[::wind_sample],
-            df_wind.v.values[::wind_sample],
+            df_wind.longitude.values[::barb_steps],
+            df_wind.latitude.values[::barb_steps],
+            df_wind.u.values[::barb_steps],
+            df_wind.v.values[::barb_steps],
             transform=ccrs.PlateCarree(),
             color="k",
             length=5,
@@ -87,7 +87,7 @@ def map(df, windfield=None, ax=None, wind_sample=10):
     return plt
 
 
-def trajectory(df, windfield=None):
+def trajectory(df, windfield=None, barb_steps=10):
     fig = plt.figure(figsize=(10, 4))
 
     gs = GridSpec(3, 2)
@@ -118,7 +118,7 @@ def trajectory(df, windfield=None):
         ),
     )
 
-    map(df, windfield, ax=ax5, wind_sample=20)
+    map(df, windfield, ax=ax5, barb_steps=barb_steps)
 
     plt.tight_layout()
 
