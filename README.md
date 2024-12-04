@@ -20,12 +20,13 @@ A more detailed user guide is available in the OpenAP handbook: <https://openap.
 1. Install from PyPI:
 
 ```sh
-pip install --upgrade opena-top
+pip install --upgrade openap-top
 ```
 
-2. Install the development branch from GitHub:
+2. Install the development branch from GitHub (also ensures the development branch of `openap`):
 
 ```sh
+pip install --upgrade git+https://github.com/junzis/openap
 pip install --upgrade git+https://github.com/junzis/openap-top
 ```
 
