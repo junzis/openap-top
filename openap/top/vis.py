@@ -88,7 +88,7 @@ def map(df, windfield=None, ax=None, barb_steps=10):
 
 
 def trajectory(df, windfield=None, barb_steps=10):
-    fig = plt.figure(figsize=(10, 4))
+    fig = plt.figure(figsize=(12, 5))
 
     gs = GridSpec(3, 2)
 
