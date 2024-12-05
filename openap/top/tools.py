@@ -168,18 +168,18 @@ def interpolant_from_dataframe(
     assert "latitude" in df.columns, "Missing 'latitude' column in DataFrame"
     assert "height" in df.columns, "Missing 'height' column in DataFrame"
 
-    df = df.sort_values(["height", "latitude", "longitude"], ascending=True)
-
     if "ts" in df.columns:
+        df = df.sort_values(["ts", "height", "latitude", "longitude"], ascending=True)
         return construct_interpolant(
             df.longitude.unique(),
             df.latitude.unique(),
             df.height.unique(),
             df.cost.values,
-            df.ts.values,
+            df.ts.unique(),
             shape=shape,
         )
     else:
+        df = df.sort_values(["height", "latitude", "longitude"], ascending=True)
         return construct_interpolant(
             df.longitude.unique(),
             df.latitude.unique(),
