@@ -1,3 +1,4 @@
+import warnings
 from math import pi
 
 import casadi as ca
@@ -44,43 +45,85 @@ class Cruise(Base):
         ts_min = 0
         ts_max = 24 * 3600
 
-        mach_max = self.aircraft["limits"]["MMO"]
-        mass_toc = self.initial_mass
-        mass_oew = self.aircraft["limits"]["OEW"]
         h_max = kwargs.get("h_max", self.aircraft["limits"]["ceiling"])
         h_min = kwargs.get("h_min", 15_000 * ft)
 
         # Initial conditions - Lower upper bounds
-        self.x_0_lb = [xp_0, yp_0, h_min, mass_toc, ts_min]
-        self.x_0_ub = [xp_0, yp_0, h_max, mass_toc, ts_min]
+        self.x_0_lb = [xp_0, yp_0, h_min, self.mass_init, ts_min]
+        self.x_0_ub = [xp_0, yp_0, h_max, self.mass_init, ts_min]
 
         # Final conditions - Lower and upper bounds
-        self.x_f_lb = [xp_f, yp_f, h_min, mass_oew, ts_min]
-        self.x_f_ub = [xp_f, yp_f, h_max, mass_toc, ts_max]
+        self.x_f_lb = [xp_f, yp_f, h_min, self.oew, ts_min]
+        self.x_f_ub = [xp_f, yp_f, h_max, self.mass_init, ts_max]
 
         # States - Lower and upper bounds
-        self.x_lb = [x_min, y_min, h_min, mass_oew, ts_min]
-        self.x_ub = [x_max, y_max, h_max, mass_toc, ts_max]
+        self.x_lb = [x_min, y_min, h_min, self.oew, ts_min]
+        self.x_ub = [x_max, y_max, h_max, self.mass_init, ts_max]
 
         # Control - Lower and upper bound
         self.u_lb = [0.5, -500 * fpm, -pi]
-        self.u_ub = [mach_max, 500 * fpm, 3 * pi]
+        self.u_ub = [self.mach_max, 500 * fpm, 3 * pi]
 
         # Initial guess - states
-        xp_guess = np.linspace(xp_0, xp_f, self.nodes + 1)
-        yp_guess = np.linspace(yp_0, yp_f, self.nodes + 1)
-        h_guess = h_max * np.ones(self.nodes + 1)
-        m_guess = mass_toc * np.ones(self.nodes + 1)
-        ts_guess = np.linspace(0, 6 * 3600, self.nodes + 1)
-        self.x_guess = np.vstack([xp_guess, yp_guess, h_guess, m_guess, ts_guess]).T
+        self.x_guess = self.initial_guess()
 
         # Initial guess - controls
         hdg = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
-        self.u_guess = [0.7, 0, hdg * pi / 180]
+        psi = hdg * pi / 180
+        self.u_guess = [0.7, 0, psi]
 
     def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
+        """
+        Computes the optimal trajectory for the aircraft based on the given objective.
+
+        Parameters:
+        objective (str): The objective of the optimization, default is "fuel".
+
+        **kwargs: Additional keyword arguments.
+            max_fuel (float): Customized maximum fuel constraint.
+            initial_guess (pd.DataFrame): Initial guess for the trajectory. This is
+                usually a exsiting flight trajectory.
+            return_failed (bool): If True, returns the DataFrame even if the
+                optimization fails. Default is False.
+
+        Returns:
+        pd.DataFrame: A DataFrame containing the optimized trajectory.
+
+        This function performs the following steps:
+        1. Initializes conditions and model based on the objective and arguments.
+        2. Sets up the collocation coefficients for the optimization problem.
+        3. Initializes variables for the Nonlinear Programming (NLP) problem,
+            including states, controls, and constraints.
+        4. Applies initial conditions and formulates the NLP problem by iterating
+            over the nodes and collocation points.
+        5. Adds aircraft performance constraints, time constraints, and smoothness
+            constraints for Mach number, vertical rate, and heading.
+        6. Optionally adds constraints for fixed Mach number, altitude, and track,
+            and prevents descent during cruise (if specified).
+        7. Concatenates all variables and constraints into vectors.
+        8. Creates an NLP solver using the IPOPT algorithm and solves the problem.
+        9. Extracts the final timestep and constructs a function to retrieve
+            the optimized states and controls.
+        10. Converts the optimized trajectory into a DataFrame and returns it.
+
+        Note:
+        - The function uses CasADi for symbolic computation and optimization.
+        - The constraints and bounds are defined based on the aircraft's performance
+            and operational limits.
+        """
+
+        # arguments passed init_condition to overwright h_min and h_max
         self.init_conditions(**kwargs)
+
         self.init_model(objective, **kwargs)
+
+        customized_max_fuel = kwargs.get("max_fuel", None)
+
+        initial_guess = kwargs.get("initial_guess", None)
+        if initial_guess is not None:
+            self.x_guess = self.initial_guess(initial_guess)
+
+        return_failed = kwargs.get("return_failed", False)
 
         C, D, B = self.collocation_coeff()
 
@@ -252,6 +295,16 @@ class Cruise(Base):
                 lbg.append([0])
                 ubg.append([ca.inf])
 
+        # add fuel constraint
+        g.append(X[0][3] - X[-1][3])
+        lbg.append([0])
+        ubg.append([self.fuel_max])
+
+        if customized_max_fuel is not None:
+            g.append(X[0][3] - X[-1][3] - customized_max_fuel)
+            lbg.append([-ca.inf])
+            ubg.append([0])
+
         # Concatenate vectors
         w = ca.vertcat(*w)
         g = ca.vertcat(*g)
@@ -277,5 +330,21 @@ class Cruise(Base):
         x_opt, u_opt = output(self.solution["x"])
 
         df = self.to_trajectory(ts_final, x_opt, u_opt)
+        df_copy = df.copy()
+
+        # check if the optimizer has failed
+        if df.altitude.max() < 5000:
+            warnings.warn("max altitude < 5000 ft, optimization seems to have failed.")
+            return None
+
+        if df is not None:
+            final_mass = df.mass.iloc[-1]
+
+            if final_mass < self.oew:
+                warnings.warn("final mass condition violated (smaller than OEW).")
+                df = None
+
+        if return_failed:
+            return df_copy
 
         return df

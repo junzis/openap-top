@@ -29,7 +29,7 @@ class Climb(Base):
         od_bearing = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
         od_psi = od_bearing * pi / 180
 
-        mass_0 = self.initial_mass
+        mass_0 = self.mass_init
         mass_oew = self.aircraft["limits"]["OEW"]
         h_min = 100 * ft
         h_toc = df_cruise.h.iloc[0]
@@ -75,13 +75,6 @@ class Climb(Base):
         self.u_guess = [0.2, 1500 * fpm, od_psi]
 
     def trajectory(self, objective="fuel", df_cruise=None, **kwargs) -> pd.DataFrame:
-        if self.debug:
-            ipopt_print = 5
-            print_time = 1
-        else:
-            ipopt_print = 0
-            print_time = 0
-
         if df_cruise is None:
             if self.debug:
                 print("Finding the preliminary optimal cruise trajectory parameters...")

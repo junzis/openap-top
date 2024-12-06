@@ -51,9 +51,11 @@ class Base:
         self.engtype = self.aircraft["engine"]["default"]
         self.engine = oc.prop.engine(self.aircraft["engine"]["default"])
 
-        self.initial_mass = m0 * self.aircraft["limits"]["MTOW"]
-        self.oew = self.aircraft["limits"]["OEW"]
-        self.mlw = self.aircraft["limits"]["MLW"]
+        self.mass_init = m0 * self.aircraft["mtow"]
+        self.oew = self.aircraft["oew"]
+        self.mlw = self.aircraft["mlw"]
+        self.fuel_max = self.aircraft["mfc"]
+        self.mach_max = self.aircraft["mmo"]
 
         self.use_synonym = use_synonym
 
@@ -114,6 +116,25 @@ class Base:
                 lat, lon = openap.aero.latlon(lat0, lon0, distances, bearing)
 
             return lon, lat
+
+    def initial_guess(self, flight: pd.DataFrame = None):
+        m_guess = self.mass_init * np.ones(self.nodes + 1)
+        ts_guess = np.linspace(0, 6 * 3600, self.nodes + 1)
+
+        if flight is None:
+            h_max = self.aircraft["limits"]["ceiling"]
+            xp_0, yp_0 = self.proj(self.lon1, self.lat1)
+            xp_f, yp_f = self.proj(self.lon2, self.lat2)
+            xp_guess = np.linspace(xp_0, xp_f, self.nodes + 1)
+            yp_guess = np.linspace(yp_0, yp_f, self.nodes + 1)
+            h_guess = h_max * np.ones(self.nodes + 1)
+        else:
+            xp_guess, yp_guess = self.proj(flight.longitude, flight.latitude)
+            h_guess = flight.altitude * ft
+            if "mass" in flight:
+                m_guess = flight.mass
+
+        return np.vstack([xp_guess, yp_guess, h_guess, m_guess, ts_guess]).T
 
     def enable_wind(self, windfield: pd.DataFrame):
         self.wind = tools.PolyWind(
@@ -216,7 +237,7 @@ class Base:
         self.debug = debug
 
         if debug:
-            print("Calculating optimal cruise trajectory...")
+            print("Calculating optimal trajectory...")
             ipopt_print = 5
             print_time = 1
         else:
@@ -334,16 +355,29 @@ class Base:
     def obj_time(self, x, u, dt, **kwargs):
         return dt
 
-    def obj_ci(self, x, u, dt, ci, **kwargs):
-        mach, vs, psi = u[0], u[1], u[2]
+    def obj_ci(self, x, u, dt, ci, time_price=25, fuel_price=0.8, **kwargs):
+        """
+        Calculate the objective cost index (CI) based on time and fuel costs.
+
+        Parameters:
+        x (ca.MX): state vector.
+        u (ca.MX): control vector.
+        dt (ca.MX): time step.
+        ci (float): Cost index, a percentage value between 0 and 100.
+        time_price (float): optional, cost of time per minute (default is 25 EUR/min).
+        fuel_price (float): optional, cost of fuel per liter (default is 0.8 EUR/L).
+
+        Returns:
+        ca.MX: cost index objective.
+        """
 
         fuel = self.obj_fuel(x, u, dt, **kwargs)
 
         # time cost 25 eur/min
-        time_cost = (dt / 60) * 25
+        time_cost = (dt / 60) * time_price
 
         # fuel cost 0.8 eur/L, Jet A density 0.82
-        fuel_cost = fuel * (0.8 / 0.82)
+        fuel_cost = fuel * (fuel_price / 0.82)
 
         obj = ci / 100 * time_cost + (1 - ci / 100) * fuel_cost
         return obj
@@ -387,24 +421,27 @@ class Base:
     def obj_grid_cost(self, x, u, dt, **kwargs):
         """
         Calculate the cost of the grid object.
+
         Parameters:
-        - x (list): List of state variables [xp, yp, h, m, ts].
-        - u (list): List of control variables [mach, vs, psi].
-        - dt (float): Time step.
-        - **kwargs (dict): Additional keyword arguments.
+        x (ca.MX): State vector [xp, yp, h, m, ts].
+        u (ca.MX): Control vector [mach, vs, psi].
+        dt (ca.MX): Time step.
+
+        **kwargs (dict): Additional keyword arguments.
             - interpolant (function): Interpolant function.
             - symbolic (bool): Flag indicating whether to use symbolic computation.
             - n_dim (int): Dimension of the input data (3 or 4), default to 3.
-            - time_dependent (bool): Flag indicating whether the cost is time dependent
-                the cost will multiplied by dt if true.
+            - time_dependent (bool): Flag indicating whether the cost is time dependent.
+            The cost will be multiplied by dt if true.
+
         Returns:
-        - cost (float): The calculated cost.
+        cost (ca.MX): cost objective.
+
         Raises:
-        - AssertionError: If n_dim is not 3 or 4.
+        AssertionError: If n_dim is not 3 or 4.
         """
 
         xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
-        mach, vs, psi = u[0], u[1], u[2]
 
         interpolant = kwargs.get("interpolant", None)
         symbolic = kwargs.get("symbolic", True)
@@ -508,7 +545,7 @@ class Base:
 
         fuel_ = []
         mass_ = []
-        mass = self.initial_mass
+        mass = self.mass_init
         for i, row in df.iterrows():
             fuel = self.dt * fuelflow.enroute(
                 row["mass"], row["tas"], row["altitude"], row["vertical_rate"]

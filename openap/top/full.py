@@ -1,5 +1,4 @@
 import warnings
-from collections.abc import Iterable
 from math import pi
 
 import casadi as ca
@@ -22,10 +21,31 @@ except:
 
 
 class CompleteFlight(Base):
+    """
+    A class to represent a complete flight trajectory optimization.
+
+    Methods
+    -------
+    __init__(*args, **kwargs)
+        Initializes the CompleteFlight object with given arguments.
+
+    init_conditions()
+        Initializes the direct collocation bounds and guesses for the optimization problem.
+
+    trajectory(objective="fuel", return_failed=False, **kwargs) -> pd.DataFrame
+        Calculates the complete global optimal trajectory based on the given objective.
+        Parameters:
+            objective (str): The objective of the optimization, default is "fuel".
+            return_failed (bool): If True, returns the failed trajectory if optimization fails.
+            **kwargs: Additional keyword arguments for the optimization model.
+        Returns:
+            pd.DataFrame: The optimized trajectory as a pandas DataFrame.
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def init_conditions(self):
+    def init_conditions(self, **kwargs):
         """Initialize direct collocation bounds and guesses."""
 
         # Convert lat/lon to cartisian coordinates.
@@ -38,33 +58,23 @@ class CompleteFlight(Base):
         ts_min = 0
         ts_max = 6 * 3600
 
-        mach_max = self.aircraft["limits"]["MMO"]
-        mass_oew = self.aircraft["limits"]["OEW"]
-        h_max = self.aircraft["limits"]["ceiling"]
+        h_max = kwargs.get("h_max", self.aircraft["limits"]["ceiling"])
         h_min = 100 * ft
+
         hdg = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
         psi = hdg * pi / 180
-        mass_init = self.initial_mass
 
         # Initial conditions - Lower upper bounds
-        self.x_0_lb = [xp_0, yp_0, h_min, mass_init, ts_min]
-        self.x_0_ub = [xp_0, yp_0, h_min, mass_init, ts_min]
+        self.x_0_lb = [xp_0, yp_0, h_min, self.mass_init, ts_min]
+        self.x_0_ub = [xp_0, yp_0, h_min, self.mass_init, ts_min]
 
         # Final conditions - Lower and upper bounds
-        self.x_f_lb = [xp_f, yp_f, h_min, mass_oew * 0.5, ts_min]
-        self.x_f_ub = [xp_f, yp_f, h_min, mass_init, ts_max]
+        self.x_f_lb = [xp_f, yp_f, h_min, self.oew * 0.5, ts_min]
+        self.x_f_ub = [xp_f, yp_f, h_min, self.mass_init, ts_max]
 
         # States - Lower and upper bounds
-        self.x_lb = [x_min, y_min, h_min, mass_oew * 0.5, ts_min]
-        self.x_ub = [x_max, y_max, h_max, mass_init, ts_max]
-
-        # Initial guess - states
-        xp_guess = np.linspace(xp_0, xp_f, self.nodes + 1)
-        yp_guess = np.linspace(yp_0, yp_f, self.nodes + 1)
-        h_guess = h_max * np.ones(self.nodes + 1)
-        m_guess = mass_init * np.ones(self.nodes + 1)
-        ts_guess = np.linspace(0, 6 * 3600, self.nodes + 1)
-        self.x_guess = np.vstack([xp_guess, yp_guess, h_guess, m_guess, ts_guess]).T
+        self.x_lb = [x_min, y_min, h_min, self.oew * 0.5, ts_min]
+        self.x_ub = [x_max, y_max, h_max, self.mass_init, ts_max]
 
         # Control init - lower and upper bounds
         self.u_0_lb = [0.1, 500 * fpm, psi]
@@ -76,24 +86,67 @@ class CompleteFlight(Base):
 
         # Control - Lower and upper bound
         self.u_lb = [0.1, -2500 * fpm, -pi]
-        self.u_ub = [mach_max, 2500 * fpm, 3 * pi]
+        self.u_ub = [self.mach_max, 2500 * fpm, 3 * pi]
+
+        # Initial guess for the states
+        self.x_guess = self.initial_guess()
 
         # Control - guesses
         self.u_guess = [0.6, 1000 * fpm, psi]
 
-    def trajectory(
-        self, objective="fuel", return_failed=False, **kwargs
-    ) -> pd.DataFrame:
-        if self.debug:
-            print("Calculating complete global optimal trajectory...")
-            ipopt_print = 5
-            print_time = 1
-        else:
-            ipopt_print = 0
-            print_time = 0
+    def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
+        """
+        Computes the optimal trajectory for the aircraft based on the given objective.
 
-        self.init_conditions()
+        Parameters:
+        objective (str): The objective of the optimization, default is "fuel".
+
+        **kwargs: Additional keyword arguments.
+            max_fuel (float): Customized maximum fuel constraint.
+            initial_guess (pd.DataFrame): Initial guess for the trajectory. This is
+                usually a exsiting flight trajectory.
+            return_failed (bool): If True, returns the DataFrame even if the
+                optimization fails. Default is False.
+
+        Returns:
+        pd.DataFrame: A DataFrame containing the optimized trajectory.
+
+        This function performs the following steps:
+        1. Initializes conditions and model based on the objective and arguments.
+        2. Sets up the collocation coefficients for the optimization problem.
+        3. Initializes variables for the Nonlinear Programming (NLP) problem,
+            including states, controls, and constraints.
+        4. Applies initial conditions and formulates the NLP problem by iterating
+            over the nodes and collocation points.
+        5. Adds constraints for altitude during cruise for long flights.
+        6. Adds aircraft performance constraints, time constraints, and smoothness
+            constraints for Mach number, vertical rate, and heading.
+        7. Concatenates all variables and constraints into vectors.
+        8. Creates an NLP solver using the IPOPT algorithm and solves the problem.
+        9. Extracts the final timestep and constructs a function to retrieve
+            the optimized states and controls.
+        10. Converts the optimized trajectory into a DataFrame and returns it.
+        11. Checks if the optimizer has failed due to too short flight distance.
+        12. Validates the final mass condition and returns the DataFrame or None.
+
+        Note:
+        - The function uses CasADi for symbolic computation and optimization.
+        - The constraints and bounds are defined based on the aircraft's performance
+            and operational limits.
+        """
+
+        # arguments passed init_condition to overwright h_max
+        self.init_conditions(**kwargs)
+
         self.init_model(objective, **kwargs)
+
+        customized_max_fuel = kwargs.get("max_fuel", None)
+
+        initial_guess = kwargs.get("initial_guess", None)
+        if initial_guess is not None:
+            self.x_guess = self.initial_guess(initial_guess)
+
+        return_failed = kwargs.get("return_failed", False)
 
         C, D, B = self.collocation_coeff()
 
@@ -275,6 +328,16 @@ class CompleteFlight(Base):
             lbg.append([-15 * pi / 180])
             ubg.append([15 * pi / 180])
 
+        # add fuel constraint
+        g.append(X[0][3] - X[-1][3])
+        lbg.append([0])
+        ubg.append([self.fuel_max])
+
+        if customized_max_fuel is not None:
+            g.append(X[0][3] - X[-1][3] - customized_max_fuel)
+            lbg.append([-ca.inf])
+            ubg.append([0])
+
         # Concatenate vectors
         w = ca.vertcat(*w)
         g = ca.vertcat(*g)
@@ -307,9 +370,9 @@ class CompleteFlight(Base):
         df = self.to_trajectory(ts_final, x_opt, u_opt)
         df_copy = df.copy()
 
-        # check if the optimizer has failed due to too short flight distance
+        # check if the optimizer has failed
         if df.altitude.max() < 5000:
-            warnings.warn("optimization seems to have failed.")
+            warnings.warn("max altitude < 5000 ft, optimization seems to have failed.")
             return None
 
         if df is not None:
@@ -364,6 +427,32 @@ class MultiPhase(Base):
         self.descent.emission = oc.Emission(self.actype, engtype)
 
     def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
+        """
+        Calculate the optimal trajectory including climb, cruise, and descent phases.
+
+        Parameters:
+        objective (str or tuple): The optimization objective for the trajectory.
+            It can be a string or a tuple of strings specifying the objective for
+            climb, cruise, and descent respectively. Default is "fuel".
+        **kwargs: Additional keyword arguments.
+
+        Returns:
+        pd.DataFrame: A DataFrame containing the combined trajectory data.
+
+        The DataFrame includes columns for mass, latitude, longitude, true airspeed,
+            and timestamp (ts) among others.
+
+        The method performs the following steps:
+        1. Calculate the preliminary optimal cruise trajectory parameters.
+        2. Calculate the optimal climb trajectory.
+        3. Update the cruise parameters based on the climb results and recalculate the cruise trajectory.
+        4. Calculate the optimal descent trajectory.
+        5. Determine the top of descent (TOD) point.
+        6. Adjust the timestamps for the cruise and descent phases.
+        7. Concatenate the climb, cruise, and descent data into a single DataFrame.
+
+        If the `debug` attribute is set to True, debug information will be printed.
+        """
         if isinstance(objective, str):
             obj_cl = obj_cr = obj_de = objective
         else:
@@ -384,7 +473,7 @@ class MultiPhase(Base):
         if self.debug:
             print("Finding optimal cruise trajectory...")
 
-        self.cruise.initial_mass = dfcl.mass.iloc[-1]
+        self.cruise.mass_init = dfcl.mass.iloc[-1]
         self.cruise.lat1 = dfcl.latitude.iloc[-1]
         self.cruise.lon1 = dfcl.longitude.iloc[-1]
         dfcr = self.cruise.trajectory(obj_cr, **kwargs)
@@ -393,7 +482,7 @@ class MultiPhase(Base):
         if self.debug:
             print("Finding optimal descent trajectory...")
 
-        self.descent.initial_mass = dfcr.mass.iloc[-1]
+        self.descent.mass_init = dfcr.mass.iloc[-1]
         dfde = self.descent.trajectory(obj_de, dfcr, **kwargs)
 
         # find top of descent

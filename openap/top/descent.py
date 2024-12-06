@@ -37,7 +37,7 @@ class Descent(Base):
         ts_max = 6 * 3600
 
         mass_tod = df_cruise.mass.iloc[-1]
-        mass_oew = self.aircraft["limits"]["OEW"]
+        mass_oew = self.oew
         cruise_mach = df_cruise.mach.iloc[-1]
 
         # Initial conditions - Lower and upper bounds
@@ -77,13 +77,6 @@ class Descent(Base):
         self.u_guess = [0.7, -1500 * fpm, psi_tod]
 
     def trajectory(self, objective="fuel", df_cruise=None, **kwargs) -> pd.DataFrame:
-        if self.debug:
-            ipopt_print = 5
-            print_time = 1
-        else:
-            ipopt_print = 0
-            print_time = 0
-
         if df_cruise is None:
             if self.debug:
                 print("Finding the preliminary optimal cruise trajectory parameters...")
