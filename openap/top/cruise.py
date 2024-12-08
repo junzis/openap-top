@@ -77,34 +77,16 @@ class Cruise(Base):
         Computes the optimal trajectory for the aircraft based on the given objective.
 
         Parameters:
-        objective (str): The objective of the optimization, default is "fuel".
-
-        **kwargs: Additional keyword arguments.
-            max_fuel (float): Customized maximum fuel constraint.
-            initial_guess (pd.DataFrame): Initial guess for the trajectory. This is
+        - objective (str): The objective of the optimization, default is "fuel".
+        - **kwargs: Additional keyword arguments.
+            - max_fuel (float): Customized maximum fuel constraint.
+            - initial_guess (pd.DataFrame): Initial guess for the trajectory. This is
                 usually a exsiting flight trajectory.
-            return_failed (bool): If True, returns the DataFrame even if the
+            - return_failed (bool): If True, returns the DataFrame even if the
                 optimization fails. Default is False.
 
         Returns:
-        pd.DataFrame: A DataFrame containing the optimized trajectory.
-
-        This function performs the following steps:
-        1. Initializes conditions and model based on the objective and arguments.
-        2. Sets up the collocation coefficients for the optimization problem.
-        3. Initializes variables for the Nonlinear Programming (NLP) problem,
-            including states, controls, and constraints.
-        4. Applies initial conditions and formulates the NLP problem by iterating
-            over the nodes and collocation points.
-        5. Adds aircraft performance constraints, time constraints, and smoothness
-            constraints for Mach number, vertical rate, and heading.
-        6. Optionally adds constraints for fixed Mach number, altitude, and track,
-            and prevents descent during cruise (if specified).
-        7. Concatenates all variables and constraints into vectors.
-        8. Creates an NLP solver using the IPOPT algorithm and solves the problem.
-        9. Extracts the final timestep and constructs a function to retrieve
-            the optimized states and controls.
-        10. Converts the optimized trajectory into a DataFrame and returns it.
+        - pd.DataFrame: A DataFrame containing the optimized trajectory.
 
         Note:
         - The function uses CasADi for symbolic computation and optimization.
