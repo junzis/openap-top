@@ -122,12 +122,12 @@ class Base:
         ts_guess = np.linspace(0, 6 * 3600, self.nodes + 1)
 
         if flight is None:
-            h_max = self.aircraft["limits"]["ceiling"]
+            h_cr = self.aircraft["cruise"]["height"]
             xp_0, yp_0 = self.proj(self.lon1, self.lat1)
             xp_f, yp_f = self.proj(self.lon2, self.lat2)
             xp_guess = np.linspace(xp_0, xp_f, self.nodes + 1)
             yp_guess = np.linspace(yp_0, yp_f, self.nodes + 1)
-            h_guess = h_max * np.ones(self.nodes + 1)
+            h_guess = h_cr * np.ones(self.nodes + 1)
         else:
             xp_guess, yp_guess = self.proj(flight.longitude, flight.latitude)
             h_guess = flight.altitude * ft
@@ -233,6 +233,8 @@ class Base:
         max_iteration = kwargs.get("max_iteration", 5000)
         tol = kwargs.get("tol", 1e-6)
         acceptable_tol = kwargs.get("acceptable_tol", 1e-4)
+        alpha_for_y = kwargs.get("alpha_for_y", "primal-and-full")
+        hessian_approximation = kwargs.get("hessian_approximation", "exact")
 
         self.debug = debug
 
@@ -254,8 +256,8 @@ class Base:
             "ipopt.tol": tol,
             "ipopt.acceptable_tol": acceptable_tol,
             "ipopt.mu_strategy": "adaptive",
-            "ipopt.alpha_for_y": "primal-and-full",
-            "ipopt.hessian_approximation": "limited-memory",
+            "ipopt.alpha_for_y": alpha_for_y,
+            "ipopt.hessian_approximation": hessian_approximation,
         }
 
     def init_model(self, objective, **kwargs):
@@ -449,6 +451,8 @@ class Base:
         time_dependent = kwargs.get("time_dependent", True)
         assert n_dim in [3, 4]
 
+        self.solver_options["ipopt.hessian_approximation"] = "limited-memory"
+
         lon, lat = self.proj(xp, yp, inverse=True, symbolic=symbolic)
 
         if n_dim == 3:
@@ -513,6 +517,9 @@ class Base:
         mach, vs, psi = U
         lon, lat = self.proj(xp, yp, inverse=True)
         ts_ = np.linspace(0, ts_final, n).round()
+        tas = (openap.aero.mach2tas(mach, h) / kts).round(2)
+        alt = (h / ft).round()
+        vertrate = (vs / fpm).round()
 
         df = pd.DataFrame(
             dict(
@@ -522,12 +529,11 @@ class Base:
                 h=h,
                 latitude=lat,
                 longitude=lon,
-                altitude=(h / ft).round(),
+                altitude=alt,
                 mach=mach.round(4),
-                tas=(openap.aero.mach2tas(mach, h) / kts).round(2),
-                vertical_rate=(vs / fpm).round(),
+                tas=tas,
+                vertical_rate=vertrate,
                 heading=(np.rad2deg(psi) % 360).round(2),
-                mass=mass.round(),
             )
         )
 
@@ -543,18 +549,10 @@ class Base:
             force_engine=True,
         )
 
-        fuel_ = []
-        mass_ = []
-        mass = self.mass_init
-        for i, row in df.iterrows():
-            fuel = self.dt * fuelflow.enroute(
-                row["mass"], row["tas"], row["altitude"], row["vertical_rate"]
-            )
-            mass_.append(mass)
-            fuel_.append(fuel)
-            mass -= fuel
+        fuel = self.dt * fuelflow.enroute(mass, tas, alt, vertrate)
+        mass = self.mass_init - fuel.cumsum()
 
-        df = df.assign(fuel=fuel_, mass=mass_)
+        df = df.assign(fuel=fuel.round(2), mass=mass.round())
 
         if climate_metrics:
             func_objs = []

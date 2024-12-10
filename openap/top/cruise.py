@@ -48,6 +48,9 @@ class Cruise(Base):
         h_max = kwargs.get("h_max", self.aircraft["limits"]["ceiling"])
         h_min = kwargs.get("h_min", 15_000 * ft)
 
+        hdg = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
+        psi = hdg * pi / 180
+
         # Initial conditions - Lower upper bounds
         self.x_0_lb = [xp_0, yp_0, h_min, self.mass_init, ts_min]
         self.x_0_ub = [xp_0, yp_0, h_max, self.mass_init, ts_min]
@@ -60,16 +63,22 @@ class Cruise(Base):
         self.x_lb = [x_min, y_min, h_min, self.oew, ts_min]
         self.x_ub = [x_max, y_max, h_max, self.mass_init, ts_max]
 
+        # Control init - lower and upper bounds
+        self.u_0_lb = [0.5, -500 * fpm, psi - pi / 4]
+        self.u_0_ub = [self.mach_max, 500 * fpm, psi + pi / 4]
+
+        # Control final - lower and upper bounds
+        self.u_f_lb = [0.5, -500 * fpm, psi - pi / 4]
+        self.u_f_ub = [self.mach_max, 500 * fpm, psi + pi / 4]
+
         # Control - Lower and upper bound
-        self.u_lb = [0.5, -500 * fpm, -pi]
-        self.u_ub = [self.mach_max, 500 * fpm, 3 * pi]
+        self.u_lb = [0.5, -500 * fpm, psi - pi / 2]
+        self.u_ub = [self.mach_max, 500 * fpm, psi + pi / 2]
 
         # Initial guess - states
         self.x_guess = self.initial_guess()
 
         # Initial guess - controls
-        hdg = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
-        psi = hdg * pi / 180
         self.u_guess = [0.7, 0, psi]
 
     def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
@@ -137,11 +146,20 @@ class Cruise(Base):
         for k in range(self.nodes):
             # New NLP variable for the control
             Uk = ca.MX.sym("U_" + str(k), self.u.shape[0])
-            w.append(Uk)
-            lbw.append(self.u_lb)
-            ubw.append(self.u_ub)
-            w0.append(self.u_guess)
             U.append(Uk)
+            w.append(Uk)
+
+            if k == 0:
+                lbw.append(self.u_0_lb)
+                ubw.append(self.u_0_ub)
+            elif k == self.nodes - 1:
+                lbw.append(self.u_f_lb)
+                ubw.append(self.u_f_ub)
+            else:
+                lbw.append(self.u_lb)
+                ubw.append(self.u_ub)
+
+            w0.append(self.u_guess)
 
             # State at collocation points
             Xc = []
@@ -203,7 +221,7 @@ class Cruise(Base):
         w0.append([self.range * 1000 / 200])
 
         # aircraft performane constraints
-        for k in range(1, self.nodes):
+        for k in range(self.nodes):
             S = self.aircraft["wing"]["area"]
             mass = X[k][3]
             v = oc.aero.mach2tas(U[k][0], X[k][2])
@@ -228,51 +246,51 @@ class Cruise(Base):
             lbg.append([0])
             ubg.append([ca.inf])
 
-        # constrain time and dt
-        for k in range(1, self.nodes):
-            g.append(X[k][4] - X[k - 1][4] - self.dt)
+        # ts and dt should be consistent
+        for k in range(self.nodes - 1):
+            g.append(X[k + 1][4] - X[k][4] - self.dt)
             lbg.append([-1])
             ubg.append([1])
 
         # smooth Mach number change
-        for k in range(1, self.nodes):
-            g.append(U[k][0] - U[k - 1][0])
-            lbg.append([-0.02])
-            ubg.append([0.02])  # to be tunned
+        for k in range(self.nodes - 1):
+            g.append(U[k + 1][0] - U[k][0])
+            lbg.append([-0.2])
+            ubg.append([0.2])  # to be tunned
 
         # smooth vertical rate change
-        for k in range(1, self.nodes):
-            g.append(U[k][1] - U[k - 1][1])
+        for k in range(self.nodes - 1):
+            g.append(U[k + 1][1] - U[k][1])
             lbg.append([-500 * fpm])
             ubg.append([500 * fpm])  # to be tunned
 
         # smooth heading change
-        for k in range(1, self.nodes):
-            g.append(U[k][2] - U[k - 1][2])
+        for k in range(self.nodes - 1):
+            g.append(U[k + 1][2] - U[k][2])
             lbg.append([-15 * pi / 180])
             ubg.append([15 * pi / 180])
 
         # optional constraints
         if self.fix_mach:
-            for k in range(1, self.nodes):
-                g.append(U[k][0] - U[k - 1][0])
+            for k in range(self.nodes - 1):
+                g.append(U[k + 1][0] - U[k][0])
                 lbg.append([0])
                 ubg.append([0])
 
         if self.fix_alt:
-            for k in range(1, self.nodes + 1):
-                g.append(X[k][2] - X[k - 1][2])
+            for k in range(self.nodes - 1):
+                g.append(X[k + 1][2] - X[k][2])
                 lbg.append([0])
                 ubg.append([0])
 
         if self.fix_track:
-            for k in range(1, self.nodes):
-                g.append(U[k][2] - U[k - 1][2])
+            for k in range(self.nodes - 1):
+                g.append(U[k + 1][2] - U[k][2])
                 lbg.append([0])
                 ubg.append([0])
 
         if not self.allow_descent:
-            for k in range(0, self.nodes):
+            for k in range(self.nodes):
                 g.append(U[k][1])
                 lbg.append([0])
                 ubg.append([ca.inf])

@@ -85,8 +85,8 @@ class CompleteFlight(Base):
         self.u_f_ub = [0.3, -300 * fpm, psi]
 
         # Control - Lower and upper bound
-        self.u_lb = [0.1, -2500 * fpm, -pi]
-        self.u_ub = [self.mach_max, 2500 * fpm, 3 * pi]
+        self.u_lb = [0.1, -2500 * fpm, psi - pi / 2]
+        self.u_ub = [self.mach_max, 2500 * fpm, psi + pi / 2]
 
         # Initial guess for the states
         self.x_guess = self.initial_guess()
@@ -161,18 +161,18 @@ class CompleteFlight(Base):
             Uk = ca.MX.sym("U_" + str(k), self.u.shape[0])
             U.append(Uk)
             w.append(Uk)
+
             if k == 0:
                 lbw.append(self.u_0_lb)
                 ubw.append(self.u_0_ub)
-                w0.append(self.u_guess)
             elif k == self.nodes - 1:
                 lbw.append(self.u_f_lb)
                 ubw.append(self.u_f_ub)
-                w0.append(self.u_guess)
             else:
                 lbw.append(self.u_lb)
                 ubw.append(self.u_ub)
-                w0.append(self.u_guess)
+
+            w0.append(self.u_guess)
 
             # State at collocation points
             Xc = []
@@ -259,18 +259,21 @@ class CompleteFlight(Base):
                 lbg.append([-ca.inf])
                 ubg.append([0])
 
-        # aircraft performance constraints
-        for k in range(1, self.nodes):
+        # force and energy constraint
+        for k in range(self.nodes):
             S = self.aircraft["wing"]["area"]
+            cd0 = self.drag.polar["clean"]["cd0"]
+            ck = self.drag.polar["clean"]["k"]
             mass = X[k][3]
             v = oc.aero.mach2tas(U[k][0], X[k][2])
             tas = v / kts
             alt = X[k][2] / ft
             rho = oc.aero.density(X[k][2])
             thrust_max = self.thrust.cruise(tas, alt)
+            drag = self.drag.clean(mass, tas, alt)
 
-            # max_thrust * 95% > drag (5% margin)
-            g.append(thrust_max * 0.95 - self.drag.clean(mass, tas, alt))
+            # max_thrust > drag (5% margin)
+            g.append(thrust_max * 0.95 - drag)
             lbg.append([0])
             ubg.append([ca.inf])
 
@@ -285,27 +288,33 @@ class CompleteFlight(Base):
             lbg.append([0])
             ubg.append([ca.inf])
 
+            # excess energy > change potential energy
+            excess_energy = (thrust_max - drag) * v - mass * oc.aero.g0 * U[k][1]
+            g.append(excess_energy)
+            lbg.append([0])
+            ubg.append([ca.inf])
+
         # ts and dt should be consistent
-        for k in range(1, self.nodes):
-            g.append(X[k][4] - X[k - 1][4] - self.dt)
+        for k in range(self.nodes - 1):
+            g.append(X[k + 1][4] - X[k][4] - self.dt)
             lbg.append([-1])
             ubg.append([1])
 
         # smooth Mach number change
-        for k in range(1, self.nodes):
-            g.append(U[k][0] - U[k - 1][0])
+        for k in range(self.nodes - 1):
+            g.append(U[k + 1][0] - U[k][0])
             lbg.append([-0.2])
             ubg.append([0.2])  # to be tunned
 
         # smooth vertical rate change
-        for k in range(1, self.nodes):
-            g.append(U[k][1] - U[k - 1][1])
+        for k in range(self.nodes - 1):
+            g.append(U[k + 1][1] - U[k][1])
             lbg.append([-500 * fpm])
             ubg.append([500 * fpm])  # to be tunned
 
         # smooth heading change
-        for k in range(1, self.nodes):
-            g.append(U[k][2] - U[k - 1][2])
+        for k in range(self.nodes - 1):
+            g.append(U[k + 1][2] - U[k][2])
             lbg.append([-15 * pi / 180])
             ubg.append([15 * pi / 180])
 
