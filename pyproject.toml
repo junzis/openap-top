@@ -58,6 +58,10 @@ select = [
 [tool.ruff.lint.isort]
 known-first-party = ["numpy", "pandas", "pyproj"]
 
+
+[tool.hatch.build.targets.wheel]
+packages = ["openap/top"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
