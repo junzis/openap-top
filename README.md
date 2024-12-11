@@ -16,7 +16,7 @@ What's more, you can also design your own objective functions and constraints to
 
 ## 🕮 User Guide
 
-A more detailed user guide is available in the OpenAP handbook: <https://openap.dev/optimize.html>.
+A more detailed user guide is available in the OpenAP handbook: <https://openap.dev/optimize>.
 
 
 ## Install
