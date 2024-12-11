@@ -282,21 +282,21 @@ class Base:
 
         # Handel objective function
         if isinstance(objective, Callable):
-            function = objective
+            self.objective = objective
         elif objective.lower().startswith("ci:"):
             ci = int(objective[3:])
             kwargs["ci"] = ci
-            function = self.obj_ci
+            self.objective = self.obj_ci
         else:
-            function = getattr(self, f"obj_{objective}")
+            self.objective = getattr(self, f"obj_{objective}")
 
-        L = function(self.x, self.u, self.dt, **kwargs)
+        L = self.objective(self.x, self.u, self.dt, **kwargs)
 
         # scale objective based on initial guess
         x0 = self.x_guess.T
         u0 = self.u_guess
         dt0 = self.range / 200 / self.nodes
-        cost = np.sum(function(x0, u0, dt0, symbolic=False, **kwargs))
+        cost = np.sum(self.objective(x0, u0, dt0, symbolic=False, **kwargs))
         L = L / cost * 1e3
 
         # Continuous time dynamics
@@ -497,7 +497,7 @@ class Base:
 
         return ratio * c1 / n1 + (1 - ratio) * c2 / n2
 
-    def to_trajectory(self, ts_final, x_opt, u_opt, climate_metrics=False):
+    def to_trajectory(self, ts_final, x_opt, u_opt):
         X = x_opt.full()
         U = u_opt.full()
 
@@ -553,14 +553,5 @@ class Base:
         mass = self.mass_init - fuel.cumsum()
 
         df = df.assign(fuel=fuel.round(2), mass=mass.round())
-
-        if climate_metrics:
-            func_objs = []
-            for func in dir(self):
-                if ("obj_gwp" in func) or ("obj_gtp" in func):
-                    func_objs.append(func)
-
-            for fo in func_objs:
-                df[fo] = getattr(self, fo)(X, U, self.dt, symbolic=False)
 
         return df

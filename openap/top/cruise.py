@@ -252,17 +252,17 @@ class Cruise(Base):
             lbg.append([-1])
             ubg.append([1])
 
-        # smooth Mach number change
-        for k in range(self.nodes - 1):
-            g.append(U[k + 1][0] - U[k][0])
-            lbg.append([-0.2])
-            ubg.append([0.2])  # to be tunned
+        # # smooth Mach number change
+        # for k in range(self.nodes - 1):
+        #     g.append(U[k + 1][0] - U[k][0])
+        #     lbg.append([-0.2])
+        #     ubg.append([0.2])  # to be tunned
 
-        # smooth vertical rate change
-        for k in range(self.nodes - 1):
-            g.append(U[k + 1][1] - U[k][1])
-            lbg.append([-500 * fpm])
-            ubg.append([500 * fpm])  # to be tunned
+        # # smooth vertical rate change
+        # for k in range(self.nodes - 1):
+        #     g.append(U[k + 1][1] - U[k][1])
+        #     lbg.append([-500 * fpm])
+        #     ubg.append([500 * fpm])  # to be tunned
 
         # smooth heading change
         for k in range(self.nodes - 1):
@@ -330,6 +330,7 @@ class Cruise(Base):
         x_opt, u_opt = output(self.solution["x"])
 
         df = self.to_trajectory(ts_final, x_opt, u_opt)
+
         df_copy = df.copy()
 
         # check if the optimizer has failed
