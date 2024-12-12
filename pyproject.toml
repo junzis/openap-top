@@ -1,6 +1,6 @@
 [project]
 name = "openap-top"
-version = "1.6"
+version = "1.7"
 description = "Trajectory OPtimizer based on OpenAP model"
 authors = [{ name = "Junzi Sun", email = "j.sun-1@tudelft.nl" }]
 license = { text = "GNU LGPL v3" }
@@ -59,8 +59,12 @@ select = [
 known-first-party = ["numpy", "pandas", "pyproj"]
 
 
+[tool.hatch.metadata]
+allow-namespace-packages = true
+
 [tool.hatch.build.targets.wheel]
-packages = ["openap/top"]
+universal = true
+packages = ["openap"]
 
 [build-system]
 requires = ["hatchling"]
