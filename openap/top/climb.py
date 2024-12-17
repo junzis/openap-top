@@ -16,7 +16,7 @@ class Climb(Base):
         super().__init__(*args, **kwargs)
         self.cruise = Cruise(*args, **kwargs)
 
-    def init_conditions(self, h_end, mach_end, trk_end=None):
+    def init_conditions(self, **kwargs):
         """Initialize direct collocation bounds and guesses."""
 
         # Convert lat/lon to cartisian coordinates.
@@ -27,8 +27,15 @@ class Climb(Base):
         y_min = min(yp_0, yp_f) - 10_000
         y_max = max(yp_0, yp_f) + 10_000
 
-        if trk_end is None:
-            trk_end = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
+        h_end = kwargs.get("h_end", self.aircraft["cruise"]["height"])
+        mach_end = kwargs.get("mach_end", self.aircraft["cruise"]["mach"])
+        trk_end = kwargs.get(
+            "trk_end", oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
+        )
+
+        self.range = np.sqrt((xp_0 - xp_f) ** 2 + (yp_0 - yp_f) ** 2)
+        h_end_min = self.range * np.sin(3 * pi / 180)
+        h_end_max = self.range * np.sin(10 * pi / 180)
 
         psi_end = trk_end * pi / 180
 
@@ -36,27 +43,22 @@ class Climb(Base):
         mass_oew = self.aircraft["oew"]
         mach_max = self.aircraft["mmo"]
         h_min = 100 * ft
-
-        self.traj_range = self.wrap.climb_range()["maximum"] * 1000 * 1.5
+        h_max = self.aircraft["ceiling"]
 
         # Initial conditions - Lower and upper bounds
         self.x_0_lb = self.x_0_ub = [xp_0, yp_0, h_min, mass_0, 0]
 
         # Final conditions - Lower and upper bounds
-        self.x_f_lb = [x_min, y_min, h_end, mass_oew, 0]
-        self.x_f_ub = [x_max, y_max, h_end, mass_0, 3600]
+        self.x_f_lb = [xp_f, yp_f, h_end_min, mass_oew, 0]
+        self.x_f_ub = [xp_f, yp_f, h_end_max, mass_0, 3600]
 
         # States - Lower and upper bounds
         self.x_lb = [x_min, y_min, h_min, mass_oew, 0]
-        self.x_ub = [x_max, y_max, h_end, mass_0, 3600]
+        self.x_ub = [x_max, y_max, h_max, mass_0, 3600]
 
         # States - guesses
-        xp_guess = xp_0 + np.linspace(
-            0, self.traj_range * np.sin(psi_end), self.nodes + 1
-        )
-        yp_guess = yp_0 + np.linspace(
-            0, self.traj_range * np.cos(psi_end), self.nodes + 1
-        )
+        xp_guess = xp_0 + np.linspace(0, self.range * np.sin(psi_end), self.nodes + 1)
+        yp_guess = yp_0 + np.linspace(0, self.range * np.cos(psi_end), self.nodes + 1)
         h_guess = np.linspace(h_min, h_end, self.nodes + 1)
         m_guess = mass_0 * np.ones(self.nodes + 1)
         ts_guess = np.linspace(0, 3600, self.nodes + 1)
@@ -67,7 +69,7 @@ class Climb(Base):
         self.u_0_ub = [0.3, 2500 * fpm, psi_end + pi / 2]
 
         # Control final - lower and upper bounds
-        self.u_f_lb = [0.5, 0, psi_end - pi / 2]
+        self.u_f_lb = [0.3, 0, psi_end - pi / 2]
         self.u_f_ub = [mach_max, 2500 * fpm, psi_end + pi / 2]
 
         # Control - Lower and upper bound
@@ -83,19 +85,21 @@ class Climb(Base):
         mach_end = kwargs.get("mach_end", None)
         trk_end = kwargs.get("trk_end", None)
 
-        if df_cruise is None and h_end is None and mach_end is None:
-            if self.debug:
-                print("Finding the preliminary optimal cruise trajectory parameters...")
-            df_cruise = self.cruise.trajectory(objective)
+        customized_max_fuel = kwargs.get("max_fuel", None)
 
-        if df_cruise is not None:
-            h_end = df_cruise.h.iloc[0]
-            mach_end = df_cruise.mach.iloc[0]
-            trk_end = df_cruise.heading.iloc[0]
+        # if df_cruise is None and h_end is None and mach_end is None:
+        #     if self.debug:
+        #         print("Finding the preliminary optimal cruise trajectory parameters...")
+        #     df_cruise = self.cruise.trajectory(objective)
 
-        assert h_end is not None and mach_end is not None
+        # if df_cruise is not None:
+        #     h_end = df_cruise.h.iloc[0]
+        #     mach_end = df_cruise.mach.iloc[0]
+        #     trk_end = df_cruise.heading.iloc[0]
 
-        self.init_conditions(h_end, mach_end, trk_end)
+        # assert h_end is not None and mach_end is not None
+
+        self.init_conditions(**kwargs)
 
         if self.debug:
             print("Calculating optimal climbing trajectory...")
@@ -204,12 +208,6 @@ class Climb(Base):
         ubw.append([ca.inf])
         w0.append([3600])
 
-        # smooth Mach number changes
-        for k in range(1, self.nodes):
-            g.append(U[k][0] - U[k - 1][0])
-            lbg.append([-0.05])
-            ubg.append([0.05])
-
         # total energy model
         for k in range(self.nodes - 1):
             hk = X[k][2]
@@ -230,6 +228,12 @@ class Climb(Base):
             g.append(X[k][4] - X[k - 1][4] - self.dt)
             lbg.append([-1])
             ubg.append([1])
+
+        # smooth Mach number changes
+        for k in range(1, self.nodes):
+            g.append(U[k][0] - U[k - 1][0])
+            lbg.append([-0.1])
+            ubg.append([0.1])
 
         # smooth vertical rate changes
         for k in range(1, self.nodes):
@@ -258,6 +262,11 @@ class Climb(Base):
         # g.append(ca.sqrt((X[-1][0] - xp_0) ** 2 + (X[-1][1] - yp_0) ** 2))
         # lbg.append([self.traj_range])
         # ubg.append([self.traj_range])
+
+        if customized_max_fuel is not None:
+            g.append(X[0][3] - X[-1][3] - customized_max_fuel)
+            lbg.append([-ca.inf])
+            ubg.append([0])
 
         # Concatenate vectors
         w = ca.vertcat(*w)
