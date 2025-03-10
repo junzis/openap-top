@@ -42,8 +42,9 @@ class Cruise(Base):
         x_max = max(xp_0, xp_f) + 10_000
         y_min = min(yp_0, yp_f) - 10_000
         y_max = max(yp_0, yp_f) + 10_000
+
         ts_min = 0
-        ts_max = 24 * 3600
+        ts_max = max(5, self.range / 1000 / 500) * 3600
 
         h_max = kwargs.get("h_max", self.aircraft["limits"]["ceiling"])
         h_min = kwargs.get("h_min", 15_000 * ft)
@@ -334,9 +335,12 @@ class Cruise(Base):
         df_copy = df.copy()
 
         # check if the optimizer has failed
+        if not self.solver.stats()["success"]:
+            warnings.warn("flight might be infeasible.")
+
         if df.altitude.max() < 5000:
             warnings.warn("max altitude < 5000 ft, optimization seems to have failed.")
-            return None
+            df = None
 
         if df is not None:
             final_mass = df.mass.iloc[-1]
