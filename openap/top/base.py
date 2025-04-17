@@ -226,8 +226,15 @@ class Base:
 
         return ca.vertcat(dx, dy, dh, dm, dt)
 
-    def setup(self, nodes=40, polydeg=3, debug=False, **kwargs):
-        self.nodes = nodes
+    def setup(self, nodes: int | None = None, polydeg: int = 3, debug=False, **kwargs):
+        if nodes is not None:
+            self.nodes = nodes
+        else:
+            self.nodes = int(self.range / 50_000)  # node every 50km
+
+        self.nodes = max(20, self.nodes)
+        self.nodes = min(120, self.nodes)
+
         self.polydeg = polydeg
 
         max_iteration = kwargs.get("max_iteration", 5000)
@@ -549,8 +556,12 @@ class Base:
             force_engine=True,
         )
 
-        fuel = self.dt * fuelflow.enroute(mass, tas, alt, vertrate)
-        mass = self.mass_init - fuel.cumsum()
+        # fast way to calculate fuel flow without iterate over rows
+        mass = self.mass_init * np.ones_like(mass)
+        for i in range(5):
+            ff = fuelflow.enroute(mass=mass, tas=tas, alt=alt, vs=vertrate)
+            fuel = ff * self.dt
+            mass[1:] = self.mass_init - fuel.cumsum()[:-1]
 
         df = df.assign(fuel=fuel.round(2), mass=mass.round())
 
