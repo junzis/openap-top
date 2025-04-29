@@ -2,7 +2,7 @@
 name = "openap-top"
 version = "1.7"
 description = "Trajectory OPtimizer based on OpenAP model"
-authors = [{ name = "Junzi Sun", email = "j.sun-1@tudelft.nl" }]
+authors = [{ name = "Junzi Sun", email = "git@junzis.com" }]
 license = { text = "GNU LGPL v3" }
 readme = "README.md"
 classifiers = [
