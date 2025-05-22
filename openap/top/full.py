@@ -266,12 +266,12 @@ class CompleteFlight(Base):
             cd0 = self.drag.polar["clean"]["cd0"]
             ck = self.drag.polar["clean"]["k"]
             mass = X[k][3]
-            v = oc.aero.mach2tas(U[k][0], X[k][2])
+            v = oc.aero.mach2tas(U[k][0], X[k][2],self.dT)
             tas = v / kts
             alt = X[k][2] / ft
-            rho = oc.aero.density(X[k][2])
-            thrust_max = self.thrust.cruise(tas, alt)
-            drag = self.drag.clean(mass, tas, alt)
+            rho = oc.aero.density(X[k][2],self.dT)
+            thrust_max = self.thrust.cruise(tas, alt,dT = self.dT)
+            drag = self.drag.clean(mass, tas, alt,dT = self.dT)
 
             # max_thrust > drag (5% margin)
             g.append(thrust_max * 0.95 - drag)

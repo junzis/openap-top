@@ -216,7 +216,7 @@ class Descent(Base):
 
         # # flight path angle
         # for k in range(0, self.nodes):
-        #     v = oc.aero.mach2tas(U[k][0], X[k][2])
+        #     v = oc.aero.mach2tas(U[k][0], X[k][2],self.dT)
         #     vs = U[k][1]
         #     g.append(vs / v)
         #     lbg.append([np.tan(np.radians(-4))])
@@ -240,10 +240,10 @@ class Descent(Base):
         for k in range(self.nodes - 1):
             vs = U[k][1]
             h = X[k][2]
-            v = oc.aero.mach2tas(U[k][0], h)
+            v = oc.aero.mach2tas(U[k][0], h, self.dT)
             gamma = ca.arctan2(vs, v)
-            thrust_idle = self.thrust.descent_idle(v / kts, h / ft)
-            drag = self.drag.clean(X[k][3], v / kts, h / ft)
+            thrust_idle = self.thrust.descent_idle(v / kts, h / ft, dT =self.dT)
+            drag = self.drag.clean(X[k][3], v / kts, h / ft, dT=self.dT)
             g.append(thrust_idle - X[k][3] * 9.8 * ca.sin(gamma) - drag)
             lbg.append([-ca.inf])
             ubg.append([0])
@@ -253,13 +253,13 @@ class Descent(Base):
             hk = X[k][2]
             hk1 = X[k + 1][2]
             vs = U[k][1]
-            vk = oc.aero.mach2tas(U[k][0], hk)
-            vk1 = oc.aero.mach2tas(U[k + 1][0], hk1)
+            vk = oc.aero.mach2tas(U[k][0], hk, self.dT)
+            vk1 = oc.aero.mach2tas(U[k + 1][0], hk1,self.dT)
             pa = ca.arctan2(vs, vk) * 180 / pi
             dvdt = (vk1 - vk) / self.dt
             dhdt = (hk1 - hk) / self.dt
-            thrust_idle = self.thrust.descent_idle(vk / kts, hk / ft)
-            drag = self.drag.clean(X[k][3], vk / kts, hk / ft, pa)
+            thrust_idle = self.thrust.descent_idle(vk / kts, hk / ft, dT = self.dT)
+            drag = self.drag.clean(X[k][3], vk / kts, hk / ft, pa, dT = self.dT)
             g.append((thrust_idle - drag) / X[k][3] - oc.aero.g0 / vk * dhdt - dvdt)
             lbg.append([0])
             ubg.append([ca.inf])

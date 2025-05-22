@@ -225,14 +225,14 @@ class Cruise(Base):
         for k in range(self.nodes):
             S = self.aircraft["wing"]["area"]
             mass = X[k][3]
-            v = oc.aero.mach2tas(U[k][0], X[k][2])
+            v = oc.aero.mach2tas(U[k][0], X[k][2], self.dT)
             tas = v / kts
             alt = X[k][2] / ft
-            rho = oc.aero.density(X[k][2])
-            thrust_max = self.thrust.cruise(tas, alt)
+            rho = oc.aero.density(X[k][2], self.dT)
+            thrust_max = self.thrust.cruise(tas, alt, dT =self.dT)
 
             # max_thrust * 95% > drag (5% margin)
-            g.append(thrust_max * 0.95 - self.drag.clean(mass, tas, alt))
+            g.append(thrust_max * 0.95 - self.drag.clean(mass, tas, alt, dT = self.dT))
             lbg.append([0])
             ubg.append([ca.inf])
 
