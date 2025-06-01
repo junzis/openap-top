@@ -134,6 +134,13 @@ class Base:
             if "mass" in flight:
                 m_guess = flight.mass
 
+            if "ts" in flight:
+                ts_guess = flight.ts
+            elif "timestamp" in flight:
+                ts_guess = (
+                    flight.timestamp - flight.timestamp.min()
+                ).dt.total_seconds()
+
         return np.vstack([xp_guess, yp_guess, h_guess, m_guess, ts_guess]).T
 
     def enable_wind(self, windfield: pd.DataFrame):
