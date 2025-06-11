@@ -233,14 +233,23 @@ class Base:
 
         return ca.vertcat(dx, dy, dh, dm, dt)
 
-    def setup(self, nodes: int | None = None, polydeg: int = 3, debug=False, **kwargs):
+    def setup(
+        self,
+        nodes: int | None = None,
+        polydeg: int = 3,
+        debug=False,
+        ipopt_kwargs={},
+        **kwargs,
+    ):
         if nodes is not None:
             self.nodes = nodes
         else:
             self.nodes = int(self.range / 50_000)  # node every 50km
 
+        max_nodes = kwargs.get("max_nodes", 120)
+
         self.nodes = max(20, self.nodes)
-        self.nodes = min(120, self.nodes)
+        self.nodes = min(max_nodes, self.nodes)
 
         self.polydeg = polydeg
 
@@ -273,6 +282,9 @@ class Base:
             "ipopt.alpha_for_y": alpha_for_y,
             "ipopt.hessian_approximation": hessian_approximation,
         }
+
+        for key, value in ipopt_kwargs.items():
+            self.solver_options[f"ipopt.{key}"] = value
 
     def init_model(self, objective, **kwargs):
         # Model variables

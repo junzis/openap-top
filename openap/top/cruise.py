@@ -279,8 +279,8 @@ class Cruise(Base):
                 ubg.append([0])
 
         if self.fix_alt:
-            for k in range(self.nodes - 1):
-                g.append(X[k + 1][2] - X[k][2])
+            for k in range(self.nodes):
+                g.append(U[k][1])
                 lbg.append([0])
                 ubg.append([0])
 
