@@ -199,12 +199,12 @@ class Climb(Base):
             hk = X[k][2]
             hk1 = X[k + 1][2]
             vs = U[k][1]
-            vk = oc.aero.mach2tas(U[k][0], hk,  dT = self.dT)
-            vk1 = oc.aero.mach2tas(U[k + 1][0], hk1,  dT = self.dT)
+            vk = oc.aero.mach2tas(U[k][0], hk, dT=self.dT)
+            vk1 = oc.aero.mach2tas(U[k + 1][0], hk1, dT=self.dT)
             dvdt = (vk1 - vk) / self.dt
             dhdt = (hk1 - hk) / self.dt
-            thrust_max = self.thrust.climb(0, hk / ft, 0, dT = self.dT)
-            drag = self.drag.clean(X[k][3], vk / kts, hk / ft, dT = self.dT)
+            thrust_max = self.thrust.climb(0, hk / ft, 0, dT=self.dT)
+            drag = self.drag.clean(X[k][3], vk / kts, hk / ft, dT=self.dT)
             g.append((thrust_max - drag) / X[k][3] - oc.aero.g0 / vk * dhdt - dvdt)
             lbg.append([0])
             ubg.append([ca.inf])
