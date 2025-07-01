@@ -24,6 +24,7 @@ class Base:
         origin: Union[str, tuple],
         destination: Union[str, tuple],
         m0: float = 0.8,
+        dT: float = 0.0,
         use_synonym=False,
     ):
         """OpenAP trajectory optimizer.
@@ -33,6 +34,7 @@ class Base:
             origin (Union[str, tuple]): ICAO or IATA code of airport, or tuple (lat, lon)
             destination (Union[str, tuple]): ICAO or IATA code of airport, or tuple (lat, lon)
             m0 (float, optional): Takeoff mass factor. Defaults to 0.8 (of MTOW).
+            dT (float, optional): Temperature shift from standard ISA. Default = 0
         """
         if isinstance(origin, str):
             ap1 = openap.nav.airport(origin)
@@ -56,6 +58,7 @@ class Base:
         self.mlw = self.aircraft["mlw"]
         self.fuel_max = self.aircraft["mfc"]
         self.mach_max = self.aircraft["mmo"]
+        self.dT = dT
 
         self.use_synonym = use_synonym
 
@@ -214,7 +217,7 @@ class Base:
         xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
         mach, vs, psi = u[0], u[1], u[2]
 
-        v = oc.aero.mach2tas(mach, h)
+        v = oc.aero.mach2tas(mach, h, dT=self.dT)
         gamma = ca.arctan2(vs, v)
 
         dx = v * ca.sin(psi) * ca.cos(gamma)
@@ -227,7 +230,7 @@ class Base:
 
         dh = vs
 
-        dm = -self.fuelflow.enroute(m, v / kts, h / ft, vs / fpm, limit=False)
+        dm = -self.fuelflow.enroute(m, v / kts, h / ft, vs / fpm, dT=self.dT)
 
         dt = 1
 
@@ -253,11 +256,11 @@ class Base:
 
         self.polydeg = polydeg
 
-        max_iteration = kwargs.get("max_iteration", 5000)
+        max_iteration = kwargs.get("max_iteration", kwargs.get("max_iterations", 3000))
         tol = kwargs.get("tol", 1e-6)
         acceptable_tol = kwargs.get("acceptable_tol", 1e-4)
         alpha_for_y = kwargs.get("alpha_for_y", "primal-and-full")
-        hessian_approximation = kwargs.get("hessian_approximation", "exact")
+        hessian_approximation = kwargs.get("hessian_approximation", "limited-memory")
 
         self.debug = debug
 
@@ -342,7 +345,7 @@ class Base:
         if symbolic:
             fuelflow = self.fuelflow
             emission = self.emission
-            v = oc.aero.mach2tas(mach, h)
+            v = oc.aero.mach2tas(mach, h, dT=self.dT)
         else:
             fuelflow = openap.FuelFlow(
                 self.actype, self.engtype, polydeg=2, use_synonym=self.use_synonym
@@ -350,14 +353,14 @@ class Base:
             emission = openap.Emission(
                 self.actype, self.engtype, use_synonym=self.use_synonym
             )
-            v = openap.aero.mach2tas(mach, h)
+            v = openap.aero.mach2tas(mach, h, dT=self.dT)
 
-        ff = fuelflow.enroute(m, v / kts, h / ft, vs / fpm, limit=False)
+        ff = fuelflow.enroute(m, v / kts, h / ft, vs / fpm, dT=self.dT)
         co2 = emission.co2(ff)
         h2o = emission.h2o(ff)
         sox = emission.sox(ff)
         soot = emission.soot(ff)
-        nox = emission.nox(ff, v / kts, h / ft)
+        nox = emission.nox(ff, v / kts, h / ft, dT=self.dT)
 
         return co2, h2o, sox, soot, nox
 
@@ -367,7 +370,7 @@ class Base:
 
         if symbolic:
             fuelflow = self.fuelflow
-            v = oc.aero.mach2tas(mach, h)
+            v = oc.aero.mach2tas(mach, h, dT=self.dT)
         else:
             fuelflow = openap.FuelFlow(
                 self.actype,
@@ -375,9 +378,9 @@ class Base:
                 use_synonym=self.use_synonym,
                 force_engine=True,
             )
-            v = openap.aero.mach2tas(mach, h)
+            v = openap.aero.mach2tas(mach, h, dT=self.dT)
 
-        ff = fuelflow.enroute(m, v / kts, h / ft, vs / fpm, limit=False)
+        ff = fuelflow.enroute(m, v / kts, h / ft, vs / fpm, dT=self.dT)
         return ff * dt
 
     def obj_time(self, x, u, dt, **kwargs):
@@ -537,18 +540,19 @@ class Base:
 
         self.X = X
         self.U = U
-        self.dt = ts_final / n
+        self.dt = ts_final / (n - 1)
 
         xp, yp, h, mass, ts = X
         mach, vs, psi = U
         lon, lat = self.proj(xp, yp, inverse=True)
-        ts_ = np.linspace(0, ts_final, n).round()
-        tas = (openap.aero.mach2tas(mach, h) / kts).round(2)
+        ts_ = np.linspace(0, ts_final, n).round(4)
+        tas = (openap.aero.mach2tas(mach, h, dT=self.dT) / kts).round(4)
         alt = (h / ft).round()
         vertrate = (vs / fpm).round()
 
         df = pd.DataFrame(
             dict(
+                mass=mass,
                 ts=ts_,
                 x=xp,
                 y=yp,
@@ -556,17 +560,12 @@ class Base:
                 latitude=lat,
                 longitude=lon,
                 altitude=alt,
-                mach=mach.round(4),
+                mach=mach.round(6),
                 tas=tas,
                 vertical_rate=vertrate,
-                heading=(np.rad2deg(psi) % 360).round(2),
+                heading=(np.rad2deg(psi) % 360).round(4),
             )
         )
-
-        if self.wind:
-            wu = self.wind.calc_u(xp, yp, h, ts)
-            wv = self.wind.calc_v(xp, yp, h, ts)
-            df = df.assign(wu=wu, wv=wv)
 
         fuelflow = openap.FuelFlow(
             self.actype,
@@ -575,13 +574,17 @@ class Base:
             force_engine=True,
         )
 
-        # fast way to calculate fuel flow without iterate over rows
-        mass = self.mass_init * np.ones_like(mass)
-        for i in range(5):
-            ff = fuelflow.enroute(mass=mass, tas=tas, alt=alt, vs=vertrate)
-            fuel = ff * self.dt
-            mass[1:] = self.mass_init - fuel.cumsum()[:-1]
+        df = df.assign(
+            fuelflow=(
+                fuelflow.enroute(
+                    mass=df.mass, tas=tas, alt=alt, vs=vertrate, dT=self.dT
+                )
+            )
+        )
 
-        df = df.assign(fuel=fuel.round(2), mass=mass.round())
+        if self.wind:
+            wu = self.wind.calc_u(xp, yp, h, ts)
+            wv = self.wind.calc_v(xp, yp, h, ts)
+            df = df.assign(wu=wu, wv=wv)
 
         return df
