@@ -223,9 +223,7 @@ class Base:
 
         dh = vs
 
-        dm = -self.fuelflow.enroute(
-            m, v / kts, h / ft, vs / fpm, dT=self.dT, limit=False
-        )
+        dm = -self.fuelflow.enroute(m, v / kts, h / ft, vs / fpm, dT=self.dT)
 
         dt = 1
 
@@ -242,11 +240,11 @@ class Base:
 
         self.polydeg = polydeg
 
-        max_iteration = kwargs.get("max_iteration", 1000)
+        max_iteration = kwargs.get("max_iteration", kwargs.get("max_iterations", 3000))
         tol = kwargs.get("tol", 1e-6)
         acceptable_tol = kwargs.get("acceptable_tol", 1e-4)
         alpha_for_y = kwargs.get("alpha_for_y", "primal-and-full")
-        hessian_approximation = kwargs.get("hessian_approximation", "exact")
+        hessian_approximation = kwargs.get("hessian_approximation", "limited-memory")
 
         self.debug = debug
 
@@ -338,7 +336,7 @@ class Base:
             )
             v = openap.aero.mach2tas(mach, h, dT=self.dT)
 
-        ff = fuelflow.enroute(m, v / kts, h / ft, vs / fpm, dT=self.dT, limit=False)
+        ff = fuelflow.enroute(m, v / kts, h / ft, vs / fpm, dT=self.dT)
         co2 = emission.co2(ff)
         h2o = emission.h2o(ff)
         sox = emission.sox(ff)
@@ -363,7 +361,7 @@ class Base:
             )
             v = openap.aero.mach2tas(mach, h, dT=self.dT)
 
-        ff = fuelflow.enroute(m, v / kts, h / ft, vs / fpm, dT=self.dT, limit=False)
+        ff = fuelflow.enroute(m, v / kts, h / ft, vs / fpm, dT=self.dT)
         return ff * dt
 
     def obj_time(self, x, u, dt, **kwargs):
@@ -523,18 +521,19 @@ class Base:
 
         self.X = X
         self.U = U
-        self.dt = ts_final / n
+        self.dt = ts_final / (n - 1)
 
         xp, yp, h, mass, ts = X
         mach, vs, psi = U
         lon, lat = self.proj(xp, yp, inverse=True)
-        ts_ = np.linspace(0, ts_final, n).round()
-        tas = (openap.aero.mach2tas(mach, h, dT=self.dT) / kts).round(2)
+        ts_ = np.linspace(0, ts_final, n).round(4)
+        tas = (openap.aero.mach2tas(mach, h, dT=self.dT) / kts).round(4)
         alt = (h / ft).round()
         vertrate = (vs / fpm).round()
 
         df = pd.DataFrame(
             dict(
+                mass=mass,
                 ts=ts_,
                 x=xp,
                 y=yp,
@@ -542,17 +541,12 @@ class Base:
                 latitude=lat,
                 longitude=lon,
                 altitude=alt,
-                mach=mach.round(4),
+                mach=mach.round(6),
                 tas=tas,
                 vertical_rate=vertrate,
-                heading=(np.rad2deg(psi) % 360).round(2),
+                heading=(np.rad2deg(psi) % 360).round(4),
             )
         )
-
-        if self.wind:
-            wu = self.wind.calc_u(xp, yp, h, ts)
-            wv = self.wind.calc_v(xp, yp, h, ts)
-            df = df.assign(wu=wu, wv=wv)
 
         fuelflow = openap.FuelFlow(
             self.actype,
@@ -561,13 +555,17 @@ class Base:
             force_engine=True,
         )
 
-        # fast way to calculate fuel flow without iterate over rows
-        mass = self.mass_init * np.ones_like(mass)
-        for i in range(5):
-            ff = fuelflow.enroute(mass=mass, tas=tas, alt=alt, vs=vertrate, dT=self.dT)
-            fuel = ff * self.dt
-            mass[1:] = self.mass_init - fuel.cumsum()[:-1]
+        df = df.assign(
+            fuelflow=(
+                fuelflow.enroute(
+                    mass=df.mass, tas=tas, alt=alt, vs=vertrate, dT=self.dT
+                )
+            )
+        )
 
-        df = df.assign(fuel=fuel.round(2), mass=mass.round())
+        if self.wind:
+            wu = self.wind.calc_u(xp, yp, h, ts)
+            wv = self.wind.calc_v(xp, yp, h, ts)
+            df = df.assign(wu=wu, wv=wv)
 
         return df
