@@ -1,8 +1,8 @@
 # %%
 import time
 import warnings
-
-from openap import top
+import numpy as np
+from openap_top import top
 
 # %%
 warnings.filterwarnings("ignore")
@@ -21,12 +21,18 @@ optimizer = top.CompleteFlight(actype, origin, destination, m0)
 start = time.time()
 
 flight = optimizer.trajectory(objective="fuel")
+# Evaluate components post-solution
+fuel_cost_val = float(np.sum(flight["fuel_cost"]))
+obj = optimizer.solver.stats()["iterations"]["obj"][-1]
+status = optimizer.solver.stats()['success']
+print(
+    f"Fuel Cost: {fuel_cost_val:.2f} | Objective: {obj:.2f} | Status:{status}")
 # flight = optimizer.trajectory(objective="ci:30")
 # flight = optimizer.trajectory(objective="gwp100")
 # flight = optimizer.trajectory(objective="gtp100")
 # flight = optimizer.trajectory(objective=("ci:90", "ci:10", "ci:20"))  # Multiphase
 
-
-print(flight)
-
 print(f"\nOptimal trajectory was generated in {round(time.time() - start)} seconds.\n")
+
+
+

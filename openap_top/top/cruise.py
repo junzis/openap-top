@@ -107,7 +107,7 @@ class Cruise(Base):
         self.init_conditions(**kwargs)
 
         self.init_model(objective, **kwargs)
-
+        interpolant = kwargs.get("interpolant", None)
         customized_max_fuel = kwargs.get("max_fuel", None)
 
         initial_guess = kwargs.get("initial_guess", None)
@@ -329,7 +329,7 @@ class Cruise(Base):
         output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
         x_opt, u_opt = output(self.solution["x"])
 
-        df = self.to_trajectory(ts_final, x_opt, u_opt)
+        df = self.to_trajectory(ts_final, x_opt, u_opt, interpolant=interpolant)
 
         df_copy = df.copy()
 

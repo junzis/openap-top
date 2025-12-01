@@ -124,6 +124,7 @@ class CompleteFlight(Base):
         self.init_model(objective, **kwargs)
 
         customized_max_fuel = kwargs.get("max_fuel", None)
+        interpolant = kwargs.get("interpolant", None)
 
         initial_guess = kwargs.get("initial_guess", None)
         if initial_guess is not None:
@@ -355,7 +356,8 @@ class CompleteFlight(Base):
         output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
         x_opt, u_opt = output(self.solution["x"])
 
-        df = self.to_trajectory(ts_final, x_opt, u_opt)
+        df = self.to_trajectory(ts_final, x_opt, u_opt, interpolant = interpolant)
+
         df_copy = df.copy()
 
         # check if the optimizer has failed
@@ -390,6 +392,7 @@ class MultiPhase(Base):
         self.cruise = Cruise(*args, **kwargs)
         self.climb = Climb(*args, **kwargs)
         self.descent = Descent(*args, **kwargs)
+
 
     def enable_wind(self, windfield: pd.DataFrame):
         w = tools.PolyWind(
@@ -452,7 +455,7 @@ class MultiPhase(Base):
 
         if self.debug:
             print("Finding the preliminary optimal cruise trajectory parameters...")
-
+        interpolant = kwargs.get("interpolant", None)
         dfcr = self.cruise.trajectory(obj_cr, **kwargs)
 
         # climb
@@ -460,6 +463,7 @@ class MultiPhase(Base):
             print("Finding optimal climb trajectory...")
 
         dfcl = self.climb.trajectory(obj_cl, dfcr, **kwargs)
+        solver_stats_climb = self.cruise.solver.stats()
 
         # cruise
         if self.debug:
@@ -469,6 +473,7 @@ class MultiPhase(Base):
         self.cruise.lat1 = dfcl.latitude.iloc[-1]
         self.cruise.lon1 = dfcl.longitude.iloc[-1]
         dfcr = self.cruise.trajectory(obj_cr, **kwargs)
+        solver_stats_cruise = self.cruise.solver.stats()
 
         # descent
         if self.debug:
@@ -476,6 +481,7 @@ class MultiPhase(Base):
 
         self.descent.mass_init = dfcr.mass.iloc[-1]
         dfde = self.descent.trajectory(obj_de, dfcr, **kwargs)
+        solver_stats_descent = self.cruise.solver.stats()
 
         # find top of descent
         dbrg = np.array(
@@ -508,3 +514,9 @@ class MultiPhase(Base):
         df_full = pd.concat([dfcl, dfcr, dfde], ignore_index=True)
 
         return df_full
+    def get_solver_stats(self):
+        return {
+            "climb": self.climb.solver.stats(),
+            "cruise": self.cruise.solver.stats(),
+            "descent": self.descent.solver.stats(),
+        }

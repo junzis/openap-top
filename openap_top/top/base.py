@@ -528,7 +528,9 @@ class Base:
 
         return ratio * c1 / n1 + (1 - ratio) * c2 / n2
 
-    def to_trajectory(self, ts_final, x_opt, u_opt):
+    def to_trajectory(self, ts_final, x_opt, u_opt, **kwargs):
+        interpolant = kwargs.get("interpolant", None)
+
         X = x_opt.full()
         U = u_opt.full()
 
@@ -552,8 +554,7 @@ class Base:
         alt = (h / ft).round()
         vertrate = (vs / fpm).round()
 
-        df = pd.DataFrame(
-            dict(
+        data = dict(
                 mass=mass,
                 ts=ts_,
                 x=xp,
@@ -566,8 +567,13 @@ class Base:
                 tas=tas,
                 vertical_rate=vertrate,
                 heading=(np.rad2deg(psi) % 360).round(4),
+                fuel_cost = self.obj_fuel(X, U, self.dt, symbolic=False)
             )
-        )
+
+        if interpolant is not None:
+            data["grid_cost"] = self.obj_grid_cost(X, U, self.dt, interpolant=interpolant, time_dependent=True, n_dim=4, symbolic=False)
+
+        df = pd.DataFrame(data)
 
         fuelflow = openap.FuelFlow(
             self.actype,
@@ -590,3 +596,4 @@ class Base:
             df = df.assign(wu=wu, wv=wv)
 
         return df
+
