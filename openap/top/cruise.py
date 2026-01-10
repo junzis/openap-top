@@ -2,7 +2,6 @@ import warnings
 from math import pi
 
 import casadi as ca
-
 import numpy as np
 import openap.casadi as oc
 import pandas as pd

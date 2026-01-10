@@ -2,7 +2,6 @@ import warnings
 from math import pi
 
 import casadi as ca
-
 import numpy as np
 import openap
 import openap.casadi as oc
@@ -16,7 +15,7 @@ from .descent import Descent
 
 try:
     from . import tools
-except:
+except Exception:
     RuntimeWarning("cfgrib and sklearn are required for wind integration")
 
 
@@ -107,6 +106,8 @@ class CompleteFlight(Base):
                 usually a exsiting flight trajectory.
             - return_failed (bool): If True, returns the DataFrame even if the
                 optimization fails. Default is False.
+            - autoscale_cost (bool): If True, objective is scaled based on initial guess
+
 
         Returns:
         - pd.DataFrame: A DataFrame containing the optimized trajectory.

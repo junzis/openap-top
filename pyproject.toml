@@ -16,7 +16,7 @@ classifiers = [
 ]
 requires-python = ">=3.9"
 dependencies = [
-    "openap>=2.0",
+    "openap>=2.4",
     "casadi>=3.6",
     "pyproj>=3.4",
     "scikit-learn>=1.4.0",
@@ -31,8 +31,8 @@ homepage = "https://openap.dev"
 repository = "https://github.com/junzis/openap-top"
 issues = "https://github.com/junzis/openap-top/issues"
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "flake8>=5.0.0",
     "black>=22.12.0",
     "isort>=5.11.4",

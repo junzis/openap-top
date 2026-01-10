@@ -1,19 +1,17 @@
 import warnings
-from math import pi
 from typing import Callable, Union
 
 import casadi as ca
+import openap.casadi as oc
+from openap.extra.aero import fpm, ft, kts
 
 import numpy as np
 import openap
-import openap.casadi as oc
 import pandas as pd
-from openap.extra.aero import fpm, ft, kts
-from pyproj import Proj
 
 try:
     from . import tools
-except:
+except Exception:
     RuntimeWarning("cfgrib and sklearn are required for wind integration")
 
 
@@ -70,6 +68,7 @@ class Base:
         )
         self.emission = oc.Emission(actype, use_synonym=self.use_synonym)
 
+        # from pyproj import Proj
         # self.proj = Proj(
         #     proj="lcc",
         #     ellps="WGS84",
@@ -290,6 +289,8 @@ class Base:
             self.solver_options[f"ipopt.{key}"] = value
 
     def init_model(self, objective, **kwargs):
+        autoscale_cost = kwargs.get("auto_scale_cost", False)
+
         # Model variables
         xp = ca.MX.sym("xp")
         yp = ca.MX.sym("yp")
@@ -321,12 +322,13 @@ class Base:
 
         L = self.objective(self.x, self.u, self.dt, **kwargs)
 
-        # scale objective based on initial guess
-        x0 = self.x_guess.T
-        u0 = self.u_guess
-        dt0 = self.range / 200 / self.nodes
-        cost = np.sum(self.objective(x0, u0, dt0, symbolic=False, **kwargs))
-        L = L / cost * 1e3
+        if autoscale_cost:
+            # scale objective based on initial guess
+            x0 = self.x_guess.T
+            u0 = self.u_guess
+            dt0 = self.range / 200 / self.nodes
+            cost = np.sum(self.objective(x0, u0, dt0, symbolic=False, **kwargs))
+            L = L / cost * 1e3
 
         # Continuous time dynamics
         self.func_dynamics = ca.Function(
