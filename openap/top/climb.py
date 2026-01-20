@@ -86,11 +86,6 @@ class Climb(Base):
         self.init_conditions(df_cruise)
         self.init_model(objective, **kwargs)
 
-        # Get grid cost parameters from kwargs
-        interpolant = kwargs.get("interpolant", None)
-        grid_cost_time_dependent = kwargs.get("time_dependent", True)
-        grid_cost_n_dim = kwargs.get("n_dim", 4)
-
         C, D, B = self.collocation_coeff()
 
         # Start with an empty NLP
@@ -270,14 +265,7 @@ class Climb(Base):
         output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
         x_opt, u_opt = output(self.solution["x"])
 
-        df = self.to_trajectory(
-            ts_final,
-            x_opt,
-            u_opt,
-            interpolant=interpolant,
-            grid_cost_time_dependent=grid_cost_time_dependent,
-            grid_cost_n_dim=grid_cost_n_dim,
-        )
+        df = self.to_trajectory(ts_final, x_opt, u_opt, **kwargs)
 
         df = df.query("vertical_rate > 100")
 

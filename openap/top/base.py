@@ -2,11 +2,12 @@ import warnings
 from typing import Callable, Union
 
 import casadi as ca
+import openap.casadi as oc
+from openap.extra.aero import fpm, ft, kts
+
 import numpy as np
 import openap
-import openap.casadi as oc
 import pandas as pd
-from openap.extra.aero import fpm, ft, kts
 
 try:
     from . import tools
@@ -527,28 +528,25 @@ class Base:
 
         return ratio * c1 / n1 + (1 - ratio) * c2 / n2
 
-    def to_trajectory(
-        self,
-        ts_final,
-        x_opt,
-        u_opt,
-        interpolant=None,
-        grid_cost_time_dependent=True,
-        grid_cost_n_dim=4,
-    ):
+    def to_trajectory(self, ts_final, x_opt, u_opt, **kwargs):
         """Convert optimization results to a trajectory DataFrame.
 
         Args:
             ts_final: Final timestamp
             x_opt: Optimized states
             u_opt: Optimized controls
-            interpolant: Optional grid cost interpolant function
-            grid_cost_time_dependent: Whether grid cost is time dependent
-            grid_cost_n_dim: Dimension of grid cost (3 or 4)
+            **kwargs: Additional arguments including:
+                - interpolant: Grid cost interpolant function
+                - time_dependent: Whether grid cost is time dependent (default True)
+                - n_dim: Dimension of grid cost, 3 or 4 (default 4)
 
         Returns:
             pd.DataFrame: Trajectory with columns including fuel_cost and grid_cost
         """
+        interpolant = kwargs.get("interpolant", None)
+        time_dependent = kwargs.get("time_dependent", True)
+        n_dim = kwargs.get("n_dim", 4)
+
         X = x_opt.full()
         U = u_opt.full()
 
@@ -582,8 +580,8 @@ class Base:
                 U,
                 self.dt,
                 interpolant=interpolant,
-                time_dependent=grid_cost_time_dependent,
-                n_dim=grid_cost_n_dim,
+                time_dependent=time_dependent,
+                n_dim=n_dim,
                 symbolic=False,
             )
         else:
