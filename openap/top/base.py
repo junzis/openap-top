@@ -528,7 +528,25 @@ class Base:
 
         return ratio * c1 / n1 + (1 - ratio) * c2 / n2
 
-    def to_trajectory(self, ts_final, x_opt, u_opt):
+    def to_trajectory(self, ts_final, x_opt, u_opt, **kwargs):
+        """Convert optimization results to a trajectory DataFrame.
+
+        Args:
+            ts_final: Final timestamp
+            x_opt: Optimized states
+            u_opt: Optimized controls
+            **kwargs: Additional arguments including:
+                - interpolant: Grid cost interpolant function
+                - time_dependent: Whether grid cost is time dependent (default True)
+                - n_dim: Dimension of grid cost, 3 or 4 (default 4)
+
+        Returns:
+            pd.DataFrame: Trajectory with columns including fuel_cost and grid_cost
+        """
+        interpolant = kwargs.get("interpolant", None)
+        time_dependent = kwargs.get("time_dependent", True)
+        n_dim = kwargs.get("n_dim", 4)
+
         X = x_opt.full()
         U = u_opt.full()
 
@@ -552,6 +570,23 @@ class Base:
         alt = (h / ft).round()
         vertrate = (vs / fpm).round()
 
+        # Calculate fuel_cost per segment
+        fuel_cost = self.obj_fuel(X, U, self.dt, symbolic=False)
+
+        # Calculate grid_cost per segment (NaN if no interpolant)
+        if interpolant is not None:
+            grid_cost = self.obj_grid_cost(
+                X,
+                U,
+                self.dt,
+                interpolant=interpolant,
+                time_dependent=time_dependent,
+                n_dim=n_dim,
+                symbolic=False,
+            )
+        else:
+            grid_cost = np.full(n, np.nan)
+
         df = pd.DataFrame(
             dict(
                 mass=mass,
@@ -566,6 +601,8 @@ class Base:
                 tas=tas,
                 vertical_rate=vertrate,
                 heading=(np.rad2deg(psi) % 360).round(4),
+                fuel_cost=fuel_cost,
+                grid_cost=grid_cost,
             )
         )
 

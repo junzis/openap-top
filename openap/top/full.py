@@ -355,7 +355,8 @@ class CompleteFlight(Base):
         output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
         x_opt, u_opt = output(self.solution["x"])
 
-        df = self.to_trajectory(ts_final, x_opt, u_opt)
+        df = self.to_trajectory(ts_final, x_opt, u_opt, **kwargs)
+
         df_copy = df.copy()
 
         # check if the optimizer has failed
@@ -508,3 +509,15 @@ class MultiPhase(Base):
         df_full = pd.concat([dfcl, dfcr, dfde], ignore_index=True)
 
         return df_full
+
+    def get_solver_stats(self):
+        """Get solver statistics for all phases.
+
+        Returns:
+            dict: Solver statistics for climb, cruise, and descent phases.
+        """
+        return {
+            "climb": self.climb.solver.stats(),
+            "cruise": self.cruise.solver.stats(),
+            "descent": self.descent.solver.stats(),
+        }

@@ -265,7 +265,7 @@ class Climb(Base):
         output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
         x_opt, u_opt = output(self.solution["x"])
 
-        df = self.to_trajectory(ts_final, x_opt, u_opt)
+        df = self.to_trajectory(ts_final, x_opt, u_opt, **kwargs)
 
         df = df.query("vertical_rate > 100")
 
