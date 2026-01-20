@@ -2,12 +2,11 @@ import warnings
 from typing import Callable, Union
 
 import casadi as ca
-import openap.casadi as oc
-from openap.extra.aero import fpm, ft, kts
-
 import numpy as np
 import openap
+import openap.casadi as oc
 import pandas as pd
+from openap.extra.aero import fpm, ft, kts
 
 try:
     from . import tools
@@ -528,9 +527,28 @@ class Base:
 
         return ratio * c1 / n1 + (1 - ratio) * c2 / n2
 
-    def to_trajectory(self, ts_final, x_opt, u_opt, **kwargs):
-        interpolant = kwargs.get("interpolant", None)
+    def to_trajectory(
+        self,
+        ts_final,
+        x_opt,
+        u_opt,
+        interpolant=None,
+        grid_cost_time_dependent=True,
+        grid_cost_n_dim=4,
+    ):
+        """Convert optimization results to a trajectory DataFrame.
 
+        Args:
+            ts_final: Final timestamp
+            x_opt: Optimized states
+            u_opt: Optimized controls
+            interpolant: Optional grid cost interpolant function
+            grid_cost_time_dependent: Whether grid cost is time dependent
+            grid_cost_n_dim: Dimension of grid cost (3 or 4)
+
+        Returns:
+            pd.DataFrame: Trajectory with columns including fuel_cost and grid_cost
+        """
         X = x_opt.full()
         U = u_opt.full()
 
@@ -554,7 +572,25 @@ class Base:
         alt = (h / ft).round()
         vertrate = (vs / fpm).round()
 
-        data = dict(
+        # Calculate fuel_cost per segment
+        fuel_cost = self.obj_fuel(X, U, self.dt, symbolic=False)
+
+        # Calculate grid_cost per segment (NaN if no interpolant)
+        if interpolant is not None:
+            grid_cost = self.obj_grid_cost(
+                X,
+                U,
+                self.dt,
+                interpolant=interpolant,
+                time_dependent=grid_cost_time_dependent,
+                n_dim=grid_cost_n_dim,
+                symbolic=False,
+            )
+        else:
+            grid_cost = np.full(n, np.nan)
+
+        df = pd.DataFrame(
+            dict(
                 mass=mass,
                 ts=ts_,
                 x=xp,
@@ -567,13 +603,10 @@ class Base:
                 tas=tas,
                 vertical_rate=vertrate,
                 heading=(np.rad2deg(psi) % 360).round(4),
-                fuel_cost = self.obj_fuel(X, U, self.dt, symbolic=False)
+                fuel_cost=fuel_cost,
+                grid_cost=grid_cost,
             )
-
-        if interpolant is not None:
-            data["grid_cost"] = self.obj_grid_cost(X, U, self.dt, interpolant=interpolant, time_dependent=True, n_dim=4, symbolic=False)
-
-        df = pd.DataFrame(data)
+        )
 
         fuelflow = openap.FuelFlow(
             self.actype,
@@ -596,4 +629,3 @@ class Base:
             df = df.assign(wu=wu, wv=wv)
 
         return df
-
