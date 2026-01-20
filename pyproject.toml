@@ -1,6 +1,6 @@
 [project]
 name = "openap-top"
-version = "1.9"
+version = "1.10"
 description = "Trajectory OPtimizer based on OpenAP model"
 authors = [{ name = "Junzi Sun", email = "git@junzis.com" }]
 license = { text = "GNU LGPL v3" }
