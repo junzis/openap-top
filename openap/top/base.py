@@ -280,7 +280,6 @@ class Base:
             "ipopt.file_print_level": 5 if debug else 0,
             "ipopt.nlp_scaling_method": "gradient-based",
             "ipopt.obj_scaling_factor": 1.0,
-            "ipopt.limited_memory_max_history": 50,
         }
 
         if debug:
