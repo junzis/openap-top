@@ -1,6 +1,6 @@
 import warnings
 from typing import Callable, Union
-
+from pathlib import Path
 import casadi as ca
 import openap.casadi as oc
 from openap.extra.aero import fpm, ft, kts
@@ -240,50 +240,65 @@ class Base:
         nodes: int | None = None,
         polydeg: int = 3,
         debug=False,
+        results_path: str | Path | None = None,
         ipopt_kwargs={},
         **kwargs,
     ):
+        if results_path is None:
+            try:
+                results_path = Path(__file__).parent
+            except NameError:
+                results_path = Path.cwd()
+        else:
+            results_path = Path(results_path)
+
+        self.results_path = results_path
+
         if nodes is not None:
             self.nodes = nodes
         else:
             self.nodes = int(self.range / 50_000)  # node every 50km
 
         max_nodes = kwargs.get("max_nodes", 120)
-
         self.nodes = max(20, self.nodes)
         self.nodes = min(max_nodes, self.nodes)
-
         self.polydeg = polydeg
-
-        max_iteration = kwargs.get("max_iteration", kwargs.get("max_iterations", 3000))
-        tol = kwargs.get("tol", 1e-6)
-        acceptable_tol = kwargs.get("acceptable_tol", 1e-4)
-        alpha_for_y = kwargs.get("alpha_for_y", "primal-and-full")
-        hessian_approximation = kwargs.get("hessian_approximation", "limited-memory")
-
         self.debug = debug
 
-        if debug:
-            print("Calculating optimal trajectory...")
-            ipopt_print = 5
-            print_time = 1
-        else:
-            ipopt_print = 0
-            print_time = 0
-
         self.solver_options = {
-            "print_time": print_time,
+            "print_time": 1 if debug else 0,
             "calc_lam_p": False,
-            "ipopt.print_level": ipopt_print,
+            "ipopt.print_level": 5 if debug else 0,
             "ipopt.sb": "yes",
-            "ipopt.max_iter": max_iteration,
+            "ipopt.max_iter": kwargs.get("max_iteration", kwargs.get("max_iterations", 3000)),
             "ipopt.fixed_variable_treatment": "relax_bounds",
-            "ipopt.tol": tol,
-            "ipopt.acceptable_tol": acceptable_tol,
+            "ipopt.tol": kwargs.get("tol", 1e-6),
+            "ipopt.acceptable_tol": kwargs.get("acceptable_tol", 1e-4),
             "ipopt.mu_strategy": "adaptive",
-            "ipopt.alpha_for_y": alpha_for_y,
-            "ipopt.hessian_approximation": hessian_approximation,
+            "ipopt.alpha_for_y": kwargs.get("alpha_for_y", "primal-and-full"),
+            "ipopt.hessian_approximation": kwargs.get("hessian_approximation", "limited-memory"),
+            "ipopt.file_print_level": 5 if debug else 0,
+            "ipopt.nlp_scaling_method": "gradient-based",
+            "ipopt.obj_scaling_factor": 1.0,
+            "ipopt.limited_memory_max_history": 50,
         }
+
+        if debug:
+            self.results_path.mkdir(parents=True, exist_ok=True)
+            existing = list(self.results_path.glob("ipopt_*.txt"))
+            numbers = []
+
+            for f in existing:
+                try:
+                    numbers.append(int(f.stem.split("_")[1]))
+                except (IndexError, ValueError):
+                    pass
+
+            next_num = max(numbers, default=0) + 1
+
+            ipopt_file = self.results_path / f"ipopt_{next_num}.txt"
+
+            self.solver_options["ipopt.output_file"] = str(ipopt_file)
 
         for key, value in ipopt_kwargs.items():
             self.solver_options[f"ipopt.{key}"] = value
