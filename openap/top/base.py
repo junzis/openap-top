@@ -259,7 +259,7 @@ class Base:
         tol = kwargs.get("tol", 1e-6)
         acceptable_tol = kwargs.get("acceptable_tol", 1e-4)
         alpha_for_y = kwargs.get("alpha_for_y", "primal-and-full")
-        hessian_approximation = kwargs.get("hessian_approximation", "limited-memory")
+        hessian_approximation = kwargs.get("hessian_approximation", "exact")
 
         self.debug = debug
 
@@ -482,7 +482,7 @@ class Base:
         time_dependent = kwargs.get("time_dependent", True)
         assert n_dim in [3, 4]
 
-        self.solver_options["ipopt.hessian_approximation"] = "limited-memory"
+        self.solver_options["ipopt.hessian_approximation"] = "exact"
 
         lon, lat = self.proj(xp, yp, inverse=True, symbolic=symbolic)
 
