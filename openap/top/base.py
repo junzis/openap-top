@@ -4,7 +4,7 @@ from pathlib import Path
 import casadi as ca
 import openap.casadi as oc
 from openap.extra.aero import fpm, ft, kts
-
+from types import SimpleNamespace
 import numpy as np
 import openap
 import pandas as pd
@@ -50,7 +50,7 @@ class Base:
         self.aircraft = oc.prop.aircraft(self.actype, use_synonym=use_synonym)
         self.engtype = self.aircraft["engine"]["default"]
         self.engine = oc.prop.engine(self.aircraft["engine"]["default"])
-
+        self.h_cr = self.aircraft["cruise"]["height"]
         self.mass_init = m0 * self.aircraft["mtow"]
         self.oew = self.aircraft["oew"]
         self.mlw = self.aircraft["mlw"]
@@ -87,7 +87,25 @@ class Base:
             warnings.warn("The destination is likely out of maximum cruise range.")
 
         self.debug = False
+        self.reset_scaling()
         self.setup()
+
+    def reset_scaling(self):
+        self.scale_x = 1.0
+        self.scale_y = 1.0
+        self.scale_h = 1.0
+        self.scale_m = 1.0
+        self.scale_t = 1.0
+        self.scale_mach = 1.0
+        self.scale_vs = 1.0
+        self.scale_psi = 1.0
+        self.scale_force = 1.0
+        self.scale_energy = 1.0
+        self.scale_obj = 1.0
+
+    def set_scaling(self, **scales):
+        for k, v in scales.items():
+            setattr(self, k, v)
 
     def proj(self, lon, lat, inverse=False, symbolic=False):
         lat0 = (self.lat1 + self.lat2) / 2
@@ -268,9 +286,9 @@ class Base:
         self.solver_options = {
             "print_time": 1 if debug else 0,
             "calc_lam_p": False,
-            "ipopt.print_level": 5 if debug else 0,
+            "ipopt.print_level": 1 if debug else 0,
             "ipopt.sb": "yes",
-            "ipopt.max_iter": kwargs.get("max_iteration", kwargs.get("max_iterations", 3000)),
+            "ipopt.max_iter": kwargs.get("max_iteration", kwargs.get("max_iterations", 6000)),
             "ipopt.fixed_variable_treatment": "relax_bounds",
             "ipopt.tol": kwargs.get("tol", 1e-6),
             "ipopt.acceptable_tol": kwargs.get("acceptable_tol", 1e-4),
@@ -279,7 +297,7 @@ class Base:
             "ipopt.hessian_approximation": kwargs.get("hessian_approximation", "limited-memory"),
             "ipopt.file_print_level": 5 if debug else 0,
             "ipopt.nlp_scaling_method": "gradient-based",
-            "ipopt.obj_scaling_factor": 1.0,
+            # "ipopt.obj_scaling_factor": 1.0,
         }
 
         if debug:
@@ -303,6 +321,7 @@ class Base:
             self.solver_options[f"ipopt.{key}"] = value
 
     def init_model(self, objective, **kwargs):
+        # todo: make this better integrating with other scaling option
         autoscale_cost = kwargs.get("auto_scale_cost", False)
 
         # Model variables
@@ -580,13 +599,14 @@ class Base:
         mach, vs, psi = U
         lon, lat = self.proj(xp, yp, inverse=True)
         ts_ = np.linspace(0, ts_final, n).round(4)
+
         tas = (openap.aero.mach2tas(mach, h, dT=self.dT) / kts).round(4)
         alt = (h / ft).round()
         vertrate = (vs / fpm).round()
 
         # Calculate fuel_cost per segment
-        fuel_cost = self.obj_fuel(X, U, self.dt, symbolic=False)
-
+        # fuel_cost = self.obj_fuel(X, U, self.dt, symbolic=False)
+        fuel_cost = np.append(-np.diff(mass), np.nan)
         # Calculate grid_cost per segment (NaN if no interpolant)
         if interpolant is not None:
             grid_cost = self.obj_grid_cost(
