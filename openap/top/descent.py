@@ -60,12 +60,12 @@ class Descent(Base):
         self.x_guess = np.vstack([xp_guess, yp_guess, h_guess, m_guess, ts_guess]).T
 
         # Control init - lower and upper bounds
-        self.u_0_lb = [cruise_mach, -2000 * fpm, psi_tod]
-        self.u_0_ub = [cruise_mach, 0, psi_tod]
+        self.u_0_lb = [cruise_mach, -2000 * fpm, -pi]
+        self.u_0_ub = [cruise_mach, 0, 3 * pi]
 
         # Control final - lower and upper bounds
-        self.u_f_lb = [0.1, -1000 * fpm, od_psi]
-        self.u_f_ub = [0.3, 0 * fpm, od_psi]
+        self.u_f_lb = [0.1, -1000 * fpm, -pi]
+        self.u_f_ub = [0.3, 0 * fpm, 3 * pi]
 
         # Control - Lower and upper bound
         self.u_lb = [0.1, -2000 * fpm, -pi]
