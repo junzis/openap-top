@@ -6,7 +6,7 @@ import numpy as np
 import openap
 import openap.casadi as oc
 import pandas as pd
-from openap.extra.aero import fpm, ft, kts
+from openap.aero import fpm, ft, kts
 
 from .base import Base
 from .climb import Climb

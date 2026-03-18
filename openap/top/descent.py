@@ -2,7 +2,7 @@ from math import pi
 
 import casadi as ca
 import openap.casadi as oc
-from openap.extra.aero import fpm, ft, kts
+from openap.aero import fpm, ft, kts
 
 import numpy as np
 import pandas as pd
