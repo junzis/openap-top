@@ -16,8 +16,13 @@ class Climb(Base):
         super().__init__(*args, **kwargs)
         self.cruise = Cruise(*args, **kwargs)
 
-    def init_conditions(self, df_cruise):
-        """Initialize direct collocation bounds and guesses."""
+    def init_conditions(self, df_cruise, alt_stop=None):
+        """Initialize direct collocation bounds and guesses.
+
+        Args:
+            df_cruise: Cruise trajectory DataFrame.
+            alt_stop: Stop altitude in feet. If provided, used instead of df_cruise.
+        """
 
         # Convert lat/lon to cartisian coordinates.
         xp_0, yp_0 = self.proj(self.lon1, self.lat1)
@@ -32,7 +37,18 @@ class Climb(Base):
         mass_0 = self.mass_init
         mass_oew = self.aircraft["limits"]["OEW"]
         h_min = 100 * ft
-        h_toc = df_cruise.h.iloc[0]
+
+        if alt_stop is not None:
+            h_toc = alt_stop * ft
+            if h_toc > df_cruise.h.iloc[0]:
+                print(
+                    "The given alt_stop is beyond performance limit, "
+                    f"we will use {df_cruise.h.iloc[0] / ft:.0f}"
+                )
+                h_toc = df_cruise.h.iloc[0]
+        else:
+            h_toc = df_cruise.h.iloc[0]
+
         cruise_mach = df_cruise.mach.iloc[0]
         self.traj_range = self.wrap.climb_range()["maximum"] * 1000 * 1.5
 
@@ -75,15 +91,18 @@ class Climb(Base):
         self.u_guess = [0.2, 1500 * fpm, od_psi]
 
     def trajectory(self, objective="fuel", df_cruise=None, **kwargs) -> pd.DataFrame:
+
+        alt_stop = kwargs.get("alt_stop", None)
+
         if df_cruise is None:
             if self.debug:
-                print("Finding the preliminary optimal cruise trajectory parameters...")
+                print("Finding the preliminary optimal cruise parameters...")
             df_cruise = self.cruise.trajectory(objective)
 
         if self.debug:
             print("Calculating optimal climbing trajectory...")
 
-        self.init_conditions(df_cruise)
+        self.init_conditions(df_cruise, alt_stop=alt_stop)
         self.init_model(objective, **kwargs)
 
         C, D, B = self.collocation_coeff()
@@ -228,11 +247,12 @@ class Climb(Base):
             ubg.append([5 * pi / 180])
 
         # final position should be along the cruise trajectory
-        xp_1, yp_1 = df_cruise.x.iloc[0], df_cruise.y.iloc[0]
-        xp_2, yp_2 = df_cruise.x.iloc[1], df_cruise.y.iloc[1]
-        g.append((yp_2 - yp_1) / (xp_2 - xp_1) - (X[-1][1] - yp_1) / (X[-1][0] - xp_1))
-        lbg.append([0])
-        ubg.append([0])
+        if df_cruise is not None:
+            xp_1, yp_1 = df_cruise.x.iloc[0], df_cruise.y.iloc[0]
+            xp_2, yp_2 = df_cruise.x.iloc[1], df_cruise.y.iloc[1]
+            g.append((yp_2 - yp_1) / (xp_2 - xp_1) - (X[-1][1] - yp_1) / (X[-1][0] - xp_1))
+            lbg.append([0])
+            ubg.append([0])
 
         # fixed range
         xp_0, yp_0 = self.proj(self.lon1, self.lat1)
@@ -267,6 +287,8 @@ class Climb(Base):
 
         df = self.to_trajectory(ts_final, x_opt, u_opt, **kwargs)
 
-        df = df.query("vertical_rate > 100")
+        remove_cruise = kwargs.get("remove_cruise", True)
+        if remove_cruise:
+            df = df.query("vertical_rate > 100")
 
         return df

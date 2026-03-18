@@ -16,11 +16,11 @@ class Descent(Base):
         super().__init__(*args, **kwargs)
         self.curise = Cruise(*args, **kwargs)
 
-    def init_conditions(self, df_cruise=None, alt_start=None):
+    def init_conditions(self, df_cruise, alt_start=None):
         """Initialize direct collocation bounds and guesses.
 
         Args:
-            df_cruise: Cruise trajectory DataFrame (iloc[0] = descent start).
+            df_cruise: Cruise trajectory DataFrame.
             alt_start: Start altitude in feet. If provided, used instead of df_cruise.
         """
 
@@ -39,20 +39,20 @@ class Descent(Base):
         ts_max = 6 * 3600
 
         mass_oew = self.oew
+        mass_tod = df_cruise.mass.iloc[0]
+        cruise_mach = df_cruise.mach.max()
+
 
         if alt_start is not None:
             h_start = alt_start * ft
             if h_start > df_cruise.h.iloc[0]:
                 print(
-                    "The given alt_start is not possible, "
+                    "The given alt_start is beyond performance limit, "
                     f"we will use {df_cruise.h.iloc[0] / ft}"
                 )
                 h_start = df_cruise.h.iloc[0]
         else:
             h_start = df_cruise.h.iloc[0]
-
-        mass_tod = df_cruise.mass.iloc[0]
-        cruise_mach = df_cruise.mach.max()
 
         # Initial conditions - Lower and upper bounds
         self.x_0_lb = [xp_0 - 1000, yp_0 - 1000, h_start - 100, mass_tod, ts_min]
@@ -97,6 +97,8 @@ class Descent(Base):
         alt_start = kwargs.get("alt_start", None)
 
         if df_cruise is None:
+            if self.debug:
+                print("Finding the preliminary optimal cruise parameters...")
             df_cruise = self.curise.trajectory(objective)
 
         if self.debug:
@@ -313,5 +315,9 @@ class Descent(Base):
         x_opt, u_opt = output(self.solution["x"])
 
         df = self.to_trajectory(ts_final, x_opt, u_opt, **kwargs)
+
+        remove_cruise = kwargs.get("remove_cruise", True)
+        if remove_cruise:
+            df = df.query("vertical_rate < -100")
 
         return df
