@@ -81,7 +81,7 @@ class Base:
         self.wind = None
 
         # Check cruise range
-        self.range = oc.aero.distance(self.lat1, self.lon1, self.lat2, self.lon2)
+        self.range = oc.geo.distance(self.lat1, self.lon1, self.lat2, self.lon2)
         max_range = self.wrap.cruise_range()["maximum"] * 1.2
         if self.range > max_range * 1000:
             warnings.warn("The destination is likely out of maximum cruise range.")
@@ -95,8 +95,8 @@ class Base:
 
         if not inverse:
             if symbolic:
-                bearings = oc.aero.bearing(lat0, lon0, lat, lon) / 180 * 3.14159
-                distances = oc.aero.distance(lat0, lon0, lat, lon)
+                bearings = oc.geo.bearing(lat0, lon0, lat, lon) / 180 * 3.14159
+                distances = oc.geo.distance(lat0, lon0, lat, lon)
                 x = distances * ca.sin(bearings)
                 y = distances * ca.cos(bearings)
             else:
@@ -111,7 +111,7 @@ class Base:
             if symbolic:
                 distances = ca.sqrt(x**2 + y**2)
                 bearing = ca.arctan2(x, y) * 180 / 3.14159
-                lat, lon = oc.aero.latlon(lat0, lon0, distances, bearing)
+                lat, lon = oc.geo.latlon(lat0, lon0, distances, bearing)
             else:
                 distances = np.sqrt(x**2 + y**2)
                 bearing = np.arctan2(x, y) * 180 / 3.14159

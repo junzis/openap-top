@@ -25,7 +25,7 @@ class Descent(Base):
         """
 
         h_min = 100 * ft
-        od_bearing = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
+        od_bearing = oc.geo.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
         od_psi = od_bearing * pi / 180
 
         xp_0, yp_0 = self.proj(self.lon1, self.lat1)

@@ -61,7 +61,7 @@ class CompleteFlight(Base):
         h_max = kwargs.get("h_max", self.aircraft["limits"]["ceiling"])
         h_min = 100 * ft
 
-        hdg = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
+        hdg = oc.geo.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
         psi = hdg * pi / 180
 
         # Initial conditions - Lower upper bounds

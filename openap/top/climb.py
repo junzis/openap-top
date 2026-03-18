@@ -31,7 +31,7 @@ class Climb(Base):
         x_max = max(xp_0, xp_f) + 10_000
         y_min = min(yp_0, yp_f) - 10_000
         y_max = max(yp_0, yp_f) + 10_000
-        od_bearing = oc.aero.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
+        od_bearing = oc.geo.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
         od_psi = od_bearing * pi / 180
 
         mass_0 = self.mass_init
