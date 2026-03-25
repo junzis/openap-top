@@ -64,22 +64,22 @@ class Cruise(Base):
         self.x_ub = [x_max, y_max, h_max, self.mass_init, ts_max]
 
         # Control init - lower and upper bounds
-        self.u_0_lb = [0.5, -500 * fpm, psi - pi / 4]
-        self.u_0_ub = [self.mach_max, 500 * fpm, psi + pi / 4]
+        self.u_0_lb = [0.5, -500 * fpm, psi - pi / 4, ts_min + 5]
+        self.u_0_ub = [self.mach_max, 500 * fpm, psi + pi / 4, ts_max]
 
         # Control final - lower and upper bounds
-        self.u_f_lb = [0.5, -500 * fpm, psi - pi / 4]
-        self.u_f_ub = [self.mach_max, 500 * fpm, psi + pi / 4]
+        self.u_f_lb = [0.5, -500 * fpm, psi - pi / 4, ts_min + 5]
+        self.u_f_ub = [self.mach_max, 500 * fpm, psi + pi / 4, ts_max]
 
         # Control - Lower and upper bound
-        self.u_lb = [0.5, -500 * fpm, psi - pi / 2]
-        self.u_ub = [self.mach_max, 500 * fpm, psi + pi / 2]
+        self.u_lb = [0.5, -500 * fpm, psi - pi / 2, ts_min + 5]
+        self.u_ub = [self.mach_max, 500 * fpm, psi + pi / 2, ts_max]
 
         # Initial guess - states
         self.x_guess = self.initial_guess()
 
         # Initial guess - controls
-        self.u_guess = [0.7, 0, psi]
+        self.u_guess = [0.7, 0, psi, 100]
 
     def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
         """
@@ -93,6 +93,7 @@ class Cruise(Base):
                 usually a exsiting flight trajectory.
             - return_failed (bool): If True, returns the DataFrame even if the
                 optimization fails. Default is False.
+            -waypoints(list of tuples [(lat,lon)])
 
         Returns:
         - pd.DataFrame: A DataFrame containing the optimized trajectory.
@@ -109,6 +110,8 @@ class Cruise(Base):
         self.init_model(objective, **kwargs)
 
         customized_max_fuel = kwargs.get("max_fuel", None)
+        uniform_nodes = kwargs.get("uniform_nodes", True)
+        waypoints = kwargs.get("waypoints", None)
 
         initial_guess = kwargs.get("initial_guess", None)
         if initial_guess is not None:
@@ -181,7 +184,7 @@ class Cruise(Base):
 
                 # Append collocation equations
                 fj, qj = self.func_dynamics(Xc[j - 1], Uk)
-                g.append(self.dt * fj - xpc)
+                g.append(U[k][3] * fj - xpc)
                 lbg.append([0] * nstates)
                 ubg.append([0] * nstates)
 
@@ -246,11 +249,45 @@ class Cruise(Base):
             lbg.append([0])
             ubg.append([ca.inf])
 
-        # ts and dt should be consistent
-        for k in range(self.nodes - 1):
-            g.append(X[k + 1][4] - X[k][4] - self.dt)
-            lbg.append([-1])
-            ubg.append([1])
+        if waypoints is not None:
+            for wp in waypoints:
+                # wpx, wpy = self.proj(wp[1], wp[0])
+                dist_min = 21_000_000
+                for k in range(self.nodes):
+                    lon_k, lat_k = self.proj(
+                        X[k][0], X[k][1], inverse=True, symbolic=True
+                    )
+                    dist_min = ca.fmin(
+                        oc.geo.distance(lat_k, lon_k, wp[0], wp[1]), dist_min
+                    )
+                g.append(dist_min)
+                lbg.append([0])
+                ubg.append([2000])
+
+            # ts and dt should  be consistent
+            if uniform_nodes:
+                for k in range(self.nodes - 1):
+                    g.append(X[k + 1][4] - X[k][4] - U[k + 1][3])
+                    lbg.append([-5])
+                    ubg.append([5])
+            else:
+                for k in range(self.nodes - 1):
+                    g.append(X[k + 1][4] - X[k][4] - U[k + 1][3])
+                    lbg.append([-200])
+                    ubg.append([200])
+        else:
+            for k in range(self.nodes - 1):
+                g.append(X[k + 1][4] - X[k][4] - U[k + 1][3])
+                lbg.append([-0])
+                ubg.append([0])
+
+        # t_final is the sum of dts
+        sum_t = 0
+        for k in range(self.nodes):
+            sum_t = sum_t + U[k][3]
+        g.append(sum_t - self.ts_final)
+        lbg.append([-1])
+        ubg.append([1])
 
         # # smooth Mach number change
         # for k in range(self.nodes - 1):
@@ -258,17 +295,33 @@ class Cruise(Base):
         #     lbg.append([-0.2])
         #     ubg.append([0.2])  # to be tunned
 
-        # # smooth vertical rate change
-        # for k in range(self.nodes - 1):
-        #     g.append(U[k + 1][1] - U[k][1])
-        #     lbg.append([-500 * fpm])
-        #     ubg.append([500 * fpm])  # to be tunned
+        # cas constraint
+        for k in range(self.nodes):
+            cas = oc.aero.mach2cas(U[k][0], X[k][2], dT=self.dT)
+            cas_max = self.aircraft["vmo"] * kts
+            g.append(cas)
+            lbg.append([0])
+            ubg.append([cas_max])
+
+        # smooth cas change
+        for k in range(1, self.nodes - 1):
+            cask = oc.aero.mach2cas(U[k][0], X[k][2], dT=self.dT)
+            cask1 = oc.aero.mach2cas(U[k + 1][0], X[k + 1][2], dT=self.dT)
+            g.append((cask1 - cask) / U[k][3])
+            lbg.append([-1])  # per second
+            ubg.append([1])  # per second]
+
+        # smooth vertical rate change
+        for k in range(self.nodes - 1):
+            g.append((U[k + 1][1] - U[k][1]) / U[k][3])
+            lbg.append([-5 * fpm])  # per second
+            ubg.append([5 * fpm])  # per second
 
         # smooth heading change
         for k in range(self.nodes - 1):
-            g.append(U[k + 1][2] - U[k][2])
-            lbg.append([-15 * pi / 180])
-            ubg.append([15 * pi / 180])
+            g.append((U[k + 1][2] - U[k][2]) / U[k][3])
+            lbg.append([-0.5 * pi / 180])  # per second
+            ubg.append([0.5 * pi / 180])  # per second
 
         # optional constraints
         if self.fix_mach:

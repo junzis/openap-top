@@ -214,7 +214,7 @@ class Base:
             ca.MX: State direvatives
         """
         xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
-        mach, vs, psi = u[0], u[1], u[2]
+        mach, vs, psi, dtime = u[0], u[1], u[2], u[3]
 
         v = oc.aero.mach2tas(mach, h, dT=self.dT)
         gamma = ca.arctan2(vs, v)
@@ -301,14 +301,15 @@ class Base:
         mach = ca.MX.sym("mach")
         vs = ca.MX.sym("vs")
         psi = ca.MX.sym("psi")
+        dtime = ca.MX.sym("dtime")
 
         self.x = ca.vertcat(xp, yp, h, m, ts)
-        self.u = ca.vertcat(mach, vs, psi)
+        self.u = ca.vertcat(mach, vs, psi, dtime)
 
         self.ts_final = ca.MX.sym("ts_final")
 
         # Control discretization
-        self.dt = self.ts_final / self.nodes
+        # self.dt = self.ts_final / self.nodes
 
         # Handel objective function
         if isinstance(objective, Callable):
@@ -320,7 +321,7 @@ class Base:
         else:
             self.objective = getattr(self, f"obj_{objective}")
 
-        L = self.objective(self.x, self.u, self.dt, **kwargs)
+        L = self.objective(self.x, self.u, **kwargs)
 
         if autoscale_cost:
             # scale objective based on initial guess
@@ -366,9 +367,9 @@ class Base:
 
         return co2, h2o, sox, soot, nox
 
-    def obj_fuel(self, x, u, dt, symbolic=True, **kwargs):
+    def obj_fuel(self, x, u, symbolic=True, **kwargs):
         xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
-        mach, vs, psi = u[0], u[1], u[2]
+        mach, vs, psi, dtime = u[0], u[1], u[2], u[3]
 
         if symbolic:
             fuelflow = self.fuelflow
@@ -383,7 +384,7 @@ class Base:
             v = openap.aero.mach2tas(mach, h, dT=self.dT)
 
         ff = fuelflow.enroute(m, v / kts, h / ft, vs / fpm, dT=self.dT)
-        return ff * dt
+        return ff * dtime
 
     def obj_time(self, x, u, dt, **kwargs):
         return dt
@@ -560,36 +561,39 @@ class Base:
 
         self.X = X
         self.U = U
-        self.dt = ts_final / (n - 1)
+        # self.dt = ts_final / (n - 1)
 
         xp, yp, h, mass, ts = X
-        mach, vs, psi = U
+        mach, vs, psi, dtime = U
+        dtime[-1] = dtime[-2]
         lon, lat = self.proj(xp, yp, inverse=True)
-        ts_ = np.linspace(0, ts_final, n).round(4)
+        # ts_ = np.linspace(0, ts_final, n).round(4)
+        ts_ = np.cumulative_sum(dtime)
         tas = (openap.aero.mach2tas(mach, h, dT=self.dT) / kts).round(4)
         alt = (h / ft).round()
         vertrate = (vs / fpm).round()
 
         # Calculate fuel_cost per segment
-        fuel_cost = self.obj_fuel(X, U, self.dt, symbolic=False)
+        fuel_cost = self.obj_fuel(X, U, symbolic=False)
 
         # Calculate grid_cost per segment (NaN if no interpolant)
-        if interpolant is not None:
-            grid_cost = self.obj_grid_cost(
-                X,
-                U,
-                self.dt,
-                interpolant=interpolant,
-                time_dependent=time_dependent,
-                n_dim=n_dim,
-                symbolic=False,
-            )
-        else:
-            grid_cost = np.full(n, np.nan)
+        # if interpolant is not None:
+        #     grid_cost = self.obj_grid_cost(
+        #         X,
+        #         U,
+        #         self.dt,
+        #         interpolant=interpolant,
+        #         time_dependent=time_dependent,
+        #         n_dim=n_dim,
+        #         symbolic=False,
+        #     )
+        # else:
+        #     grid_cost = np.full(n, np.nan)
 
         df = pd.DataFrame(
             dict(
                 mass=mass,
+                dt=dtime,
                 ts=ts_,
                 x=xp,
                 y=yp,
@@ -602,7 +606,7 @@ class Base:
                 vertical_rate=vertrate,
                 heading=(np.rad2deg(psi) % 360).round(4),
                 fuel_cost=fuel_cost,
-                grid_cost=grid_cost,
+                # grid_cost=grid_cost,
             )
         )
 

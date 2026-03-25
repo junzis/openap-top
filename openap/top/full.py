@@ -47,6 +47,8 @@ class CompleteFlight(Base):
     def init_conditions(self, **kwargs):
         """Initialize direct collocation bounds and guesses."""
 
+        waypoints = kwargs.get("waypoints", None)
+
         # Convert lat/lon to cartisian coordinates.
         xp_0, yp_0 = self.proj(self.lon1, self.lat1)
         xp_f, yp_f = self.proj(self.lon2, self.lat2)
@@ -77,22 +79,27 @@ class CompleteFlight(Base):
         self.x_ub = [x_max, y_max, h_max, self.mass_init, ts_max]
 
         # Control init - lower and upper bounds
-        self.u_0_lb = [0.1, 500 * fpm, psi]
-        self.u_0_ub = [0.3, 2500 * fpm, psi]
+        self.u_0_lb = [0.1, 500 * fpm, psi, 5]
+        self.u_0_ub = [0.3, 2500 * fpm, psi, ts_max]
 
-        # Control final - lower and upper bounds
-        self.u_f_lb = [0.1, -1500 * fpm, psi]
-        self.u_f_ub = [0.3, -300 * fpm, psi]
+        if waypoints is None:
+            # Control final - lower and upper bounds
+            self.u_f_lb = [0.1, -1500 * fpm, psi, 5]
+            self.u_f_ub = [0.3, -300 * fpm, psi, ts_max]
+        else:
+            # Control final - lower and upper bounds
+            self.u_f_lb = [0.1, -1500 * fpm, psi, 5]
+            self.u_f_ub = [0.3, -300 * fpm, psi, 150]
 
         # Control - Lower and upper bound
-        self.u_lb = [0.1, -2500 * fpm, psi - pi / 2]
-        self.u_ub = [self.mach_max, 2500 * fpm, psi + pi / 2]
+        self.u_lb = [0.1, -2500 * fpm, psi - pi / 2, 50]
+        self.u_ub = [self.mach_max, 2500 * fpm, psi + pi / 2, ts_max]
 
         # Initial guess for the states
         self.x_guess = self.initial_guess()
 
         # Control - guesses
-        self.u_guess = [0.6, 1000 * fpm, psi]
+        self.u_guess = [0.6, 1000 * fpm, psi, 200]
 
     def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
         """
@@ -107,6 +114,7 @@ class CompleteFlight(Base):
             - return_failed (bool): If True, returns the DataFrame even if the
                 optimization fails. Default is False.
             - autoscale_cost (bool): If True, objective is scaled based on initial guess
+            -waypoints(list of tuples [(lat,lon)])
 
 
         Returns:
@@ -124,13 +132,13 @@ class CompleteFlight(Base):
         self.init_model(objective, **kwargs)
 
         customized_max_fuel = kwargs.get("max_fuel", None)
-
+        uniform_nodes = kwargs.get("uniform_nodes", True)
         initial_guess = kwargs.get("initial_guess", None)
         if initial_guess is not None:
             self.x_guess = self.initial_guess(initial_guess)
 
         return_failed = kwargs.get("return_failed", False)
-
+        waypoints = kwargs.get("waypoints", None)
         C, D, B = self.collocation_coeff()
 
         # Start with an empty NLP
@@ -196,7 +204,7 @@ class CompleteFlight(Base):
 
                 # Append collocation equations
                 fj, qj = self.func_dynamics(Xc[j - 1], Uk)
-                g.append(self.dt * fj - xpc)
+                g.append(U[k][3] * fj - xpc)
                 lbg.append([0] * nstates)
                 ubg.append([0] * nstates)
 
@@ -232,34 +240,35 @@ class CompleteFlight(Base):
         ubw.append([ca.inf])
         w0.append([7200])
 
-        # constrain altitude during cruise for long cruise flights
-        if self.range > 1500_000:
-            dd = self.range / (self.nodes + 1)
-            max_climb_range = 500_000
-            max_descent_range = 300_000
-            idx_toc = int(max_climb_range / dd)
-            idx_tod = int((self.range - max_descent_range) / dd)
+        if waypoints is None:
+            # constrain altitude during cruise for long cruise flights
+            if self.range > 1500_000:
+                dd = self.range / (self.nodes + 1)
+                max_climb_range = 500_000
+                max_descent_range = 300_000
+                idx_toc = int(max_climb_range / dd)
+                idx_tod = int((self.range - max_descent_range) / dd)
 
-            for k in range(idx_toc, idx_tod):
-                # minimum avoid large changes in altitude
-                g.append(U[k][1])
-                lbg.append([-500 * fpm])
-                ubg.append([500 * fpm])
+                for k in range(idx_toc, idx_tod):
+                    # minimum avoid large changes in altitude
+                    g.append(U[k][1])
+                    lbg.append([-500 * fpm])
+                    ubg.append([500 * fpm])
 
-                # minimum cruise alt FL150
-                g.append(X[k][2])
-                lbg.append([15000 * ft])
-                ubg.append([ca.inf])
+                    # minimum cruise alt FL150
+                    g.append(X[k][2])
+                    lbg.append([15000 * ft])
+                    ubg.append([ca.inf])
 
-            for k in range(0, idx_toc):
-                g.append(U[k][1])
-                lbg.append([0])
-                ubg.append([ca.inf])
+                for k in range(0, idx_toc):
+                    g.append(U[k][1])
+                    lbg.append([0])
+                    ubg.append([ca.inf])
 
-            for k in range(idx_tod, self.nodes):
-                g.append(U[k][1])
-                lbg.append([-ca.inf])
-                ubg.append([0])
+                for k in range(idx_tod, self.nodes):
+                    g.append(U[k][1])
+                    lbg.append([-ca.inf])
+                    ubg.append([0])
 
         # force and energy constraint
         for k in range(self.nodes):
@@ -296,34 +305,86 @@ class CompleteFlight(Base):
             lbg.append([0])
             ubg.append([ca.inf])
 
-        # ts and dt should be consistent
-        for k in range(self.nodes - 1):
-            g.append(X[k + 1][4] - X[k][4] - self.dt)
-            lbg.append([-1])
-            ubg.append([1])
+        if waypoints is not None:
+            for wp in waypoints:
+                # wpx, wpy = self.proj(wp[1], wp[0])
+                dist_min = 21_000_000
+                for k in range(self.nodes):
+                    lon_k, lat_k = self.proj(
+                        X[k][0], X[k][1], inverse=True, symbolic=True
+                    )
+                    dist_min = ca.fmin(
+                        oc.geo.distance(lat_k, lon_k, wp[0], wp[1]), dist_min
+                    )
+                g.append(dist_min)
+                lbg.append([0])
+                ubg.append([2000])  ## allwoed deviation from wp is 2km -- to be tunned
 
-        # smooth Mach number change
-        for k in range(self.nodes - 1):
-            g.append(U[k + 1][0] - U[k][0])
-            lbg.append([-0.2])
-            ubg.append([0.2])  # to be tunned
+            # ts and dt should be consistent
+            if uniform_nodes:
+                for k in range(self.nodes - 1):
+                    g.append(X[k + 1][4] - X[k][4] - U[k + 1][3])
+                    lbg.append([-20])
+                    ubg.append([20])
+            else:
+                for k in range(self.nodes - 1):
+                    g.append(X[k + 1][4] - X[k][4] - U[k + 1][3])
+                    lbg.append([-100])
+                    ubg.append([100])
+        else:
+            for k in range(self.nodes - 1):
+                g.append(X[k + 1][4] - X[k][4] - U[k + 1][3])
+                lbg.append([-0])
+                ubg.append([0])
+
+        # t_final is the sum of dts
+        sum_t = 0
+        for k in range(self.nodes):
+            sum_t = sum_t + U[k][3]
+        g.append(sum_t - self.ts_final)
+        lbg.append([-1])
+        ubg.append([1])
+
+        # # smooth Mach number change
+        # for k in range(self.nodes - 1):
+        #     g.append(U[k + 1][0] - U[k][0])
+        #     lbg.append([-0.2])
+        #     ubg.append([0.2])  # to be tunned
+
+        # cas constraint
+        for k in range(self.nodes):
+            cas = oc.aero.mach2cas(U[k][0], X[k][2], dT=self.dT)
+            cas_max = self.aircraft["vmo"] * kts
+            g.append(cas)
+            lbg.append([0])
+            ubg.append([cas_max])
+
+        # smooth cas change
+        for k in range(1, self.nodes - 1):
+            cask = oc.aero.mach2cas(U[k][0], X[k][2], dT=self.dT)
+            cask1 = oc.aero.mach2cas(U[k + 1][0], X[k + 1][2], dT=self.dT)
+            g.append((cask1 - cask) / U[k][3])
+            lbg.append([-1])  # per second
+            ubg.append([1])  # per second
 
         # smooth vertical rate change
         for k in range(self.nodes - 1):
-            g.append(U[k + 1][1] - U[k][1])
-            lbg.append([-500 * fpm])
-            ubg.append([500 * fpm])  # to be tunned
+            g.append((U[k + 1][1] - U[k][1]) / U[k][3])
+            lbg.append([-5 * fpm])  # per second
+            ubg.append([5 * fpm])  # per second
 
         # smooth heading change
         for k in range(self.nodes - 1):
-            g.append(U[k + 1][2] - U[k][2])
-            lbg.append([-15 * pi / 180])
-            ubg.append([15 * pi / 180])
+            g.append((U[k + 1][2] - U[k][2]) / U[k][3])
+            lbg.append([-0.5 * pi / 180])  # per second
+            ubg.append([0.5 * pi / 180])  # per second
 
-        # add fuel constraint
-        g.append(X[0][3] - X[-1][3])
-        lbg.append([0])
-        ubg.append([self.fuel_max])
+        # More nodes at lower altitudes
+        if not uniform_nodes:
+            for k in range(self.nodes - 1):
+                g.append((X[k + 1][2] - X[k][2]))
+                lbg.append([-1_000])
+                ubg.append([1_000])
 
         if customized_max_fuel is not None:
             g.append(X[0][3] - X[-1][3] - customized_max_fuel)
