@@ -87,7 +87,99 @@ class Base:
             warnings.warn("The destination is likely out of maximum cruise range.")
 
         self.debug = False
+        self.reset_scaling()
         self.setup()
+
+    _VALID_SCALE_KEYS = frozenset({
+        "scale_x", "scale_y", "scale_h", "scale_m", "scale_t",
+        "scale_mach", "scale_vs", "scale_psi",
+        "scale_force", "scale_energy", "scale_obj",
+    })
+
+    def reset_scaling(self):
+        """Reset all scaling factors to 1.0 (no scaling)."""
+        self.scale_x = 1.0
+        self.scale_y = 1.0
+        self.scale_h = 1.0
+        self.scale_m = 1.0
+        self.scale_t = 1.0
+        self.scale_mach = 1.0
+        self.scale_vs = 1.0
+        self.scale_psi = 1.0
+        self.scale_force = 1.0
+        self.scale_energy = 1.0
+        self.scale_obj = 1.0
+
+    def set_scaling(self, **scales):
+        """Set scaling factors. Only valid scale_* keys are accepted."""
+        for k, v in scales.items():
+            if k not in self._VALID_SCALE_KEYS:
+                raise AttributeError(
+                    f"Unknown scaling key '{k}'. "
+                    f"Valid keys: {sorted(self._VALID_SCALE_KEYS)}"
+                )
+            setattr(self, k, v)
+
+    def scaled_dynamics(self, x_scaled, u_scaled):
+        """Compute dynamics in scaled coordinates."""
+        x_unscaled = ca.vertcat(
+            x_scaled[0] * self.scale_x,
+            x_scaled[1] * self.scale_y,
+            x_scaled[2] * self.scale_h,
+            x_scaled[3] * self.scale_m,
+            x_scaled[4] * self.scale_t,
+        )
+        u_unscaled = ca.vertcat(
+            u_scaled[0] * self.scale_mach,
+            u_scaled[1] * self.scale_vs,
+            u_scaled[2] * self.scale_psi,
+        )
+        f_unscaled, q_unscaled = self.func_dynamics(x_unscaled, u_unscaled)
+        f_scaled = ca.vertcat(
+            f_unscaled[0] * (self.scale_t / self.scale_x),
+            f_unscaled[1] * (self.scale_t / self.scale_y),
+            f_unscaled[2] * (self.scale_t / self.scale_h),
+            f_unscaled[3] * (self.scale_t / self.scale_m),
+            f_unscaled[4],  # dt/dt = 1, no scaling needed
+        )
+        q_scaled = q_unscaled * self.scale_t / self.scale_obj
+        return f_scaled, q_scaled
+
+    def scale_state(self, x):
+        """Scale a state vector from physical to scaled units."""
+        s = x.copy()
+        s[0] /= self.scale_x
+        s[1] /= self.scale_y
+        s[2] /= self.scale_h
+        s[3] /= self.scale_m
+        s[4] /= self.scale_t
+        return s
+
+    def unscale_state(self, x_scaled):
+        """Unscale a state vector from scaled to physical units."""
+        s = x_scaled.copy()
+        s[0] *= self.scale_x
+        s[1] *= self.scale_y
+        s[2] *= self.scale_h
+        s[3] *= self.scale_m
+        s[4] *= self.scale_t
+        return s
+
+    def scale_control(self, u):
+        """Scale a control vector from physical to scaled units."""
+        s = u.copy()
+        s[0] /= self.scale_mach
+        s[1] /= self.scale_vs
+        s[2] /= self.scale_psi
+        return s
+
+    def unscale_control(self, u_scaled):
+        """Unscale a control vector from scaled to physical units."""
+        s = u_scaled.copy()
+        s[0] *= self.scale_mach
+        s[1] *= self.scale_vs
+        s[2] *= self.scale_psi
+        return s
 
     def proj(self, lon, lat, inverse=False, symbolic=False):
         lat0 = (self.lat1 + self.lat2) / 2
