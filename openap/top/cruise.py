@@ -51,35 +51,65 @@ class Cruise(Base):
         hdg = oc.geo.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
         psi = hdg * pi / 180
 
+        # --- Scaling ---
+        scaling = kwargs.get("scaling", False)
+        if scaling:
+            self.set_scaling(
+                scale_x=max(abs(x_max - x_min) / 2, 1.0),
+                scale_y=max(abs(y_max - y_min) / 2, 1.0),
+                scale_h=max(h_max, 1.0),
+                scale_m=max(self.mass_init, 1.0),
+                scale_t=max(ts_max, 1.0),
+                scale_mach=1.0,
+                scale_vs=2500 * fpm,
+                scale_psi=np.pi,
+                scale_force=50000.0,
+                scale_energy=1e6,
+                scale_obj=1.0,
+            )
+        else:
+            self.reset_scaling()
+
+        sx = self.scale_x
+        sy = self.scale_y
+        sh = self.scale_h
+        sm = self.scale_m
+        st = self.scale_t
+        smach = self.scale_mach
+        svs = self.scale_vs
+        spsi = self.scale_psi
+
         # Initial conditions - Lower upper bounds
-        self.x_0_lb = [xp_0, yp_0, h_min, self.mass_init, ts_min]
-        self.x_0_ub = [xp_0, yp_0, h_max, self.mass_init, ts_min]
+        self.x_0_lb = [xp_0/sx, yp_0/sy, h_min/sh, self.mass_init/sm, ts_min/st]
+        self.x_0_ub = [xp_0/sx, yp_0/sy, h_max/sh, self.mass_init/sm, ts_min/st]
 
         # Final conditions - Lower and upper bounds
-        self.x_f_lb = [xp_f, yp_f, h_min, self.oew, ts_min]
-        self.x_f_ub = [xp_f, yp_f, h_max, self.mass_init, ts_max]
+        self.x_f_lb = [xp_f/sx, yp_f/sy, h_min/sh, self.oew/sm, ts_min/st]
+        self.x_f_ub = [xp_f/sx, yp_f/sy, h_max/sh, self.mass_init/sm, ts_max/st]
 
         # States - Lower and upper bounds
-        self.x_lb = [x_min, y_min, h_min, self.oew, ts_min]
-        self.x_ub = [x_max, y_max, h_max, self.mass_init, ts_max]
+        self.x_lb = [x_min/sx, y_min/sy, h_min/sh, self.oew/sm, ts_min/st]
+        self.x_ub = [x_max/sx, y_max/sy, h_max/sh, self.mass_init/sm, ts_max/st]
 
         # Control init - lower and upper bounds
-        self.u_0_lb = [0.5, -500 * fpm, psi - pi / 4]
-        self.u_0_ub = [self.mach_max, 500 * fpm, psi + pi / 4]
+        self.u_0_lb = [0.5/smach, (-500*fpm)/svs, (psi - pi/4)/spsi]
+        self.u_0_ub = [self.mach_max/smach, (500*fpm)/svs, (psi + pi/4)/spsi]
 
         # Control final - lower and upper bounds
-        self.u_f_lb = [0.5, -500 * fpm, psi - pi / 4]
-        self.u_f_ub = [self.mach_max, 500 * fpm, psi + pi / 4]
+        self.u_f_lb = [0.5/smach, (-500*fpm)/svs, (psi - pi/4)/spsi]
+        self.u_f_ub = [self.mach_max/smach, (500*fpm)/svs, (psi + pi/4)/spsi]
 
         # Control - Lower and upper bound
-        self.u_lb = [0.5, -500 * fpm, psi - pi / 2]
-        self.u_ub = [self.mach_max, 500 * fpm, psi + pi / 2]
+        self.u_lb = [0.5/smach, (-500*fpm)/svs, (psi - pi/2)/spsi]
+        self.u_ub = [self.mach_max/smach, (500*fpm)/svs, (psi + pi/2)/spsi]
 
-        # Initial guess - states
+        # Initial guess - states (compute in physical units, then scale)
         self.x_guess = self.initial_guess()
+        for i in range(len(self.x_guess)):
+            self.x_guess[i] = self.scale_state(self.x_guess[i])
 
         # Initial guess - controls
-        self.u_guess = [0.7, 0, psi]
+        self.u_guess = [0.7/smach, 0/svs, psi/spsi]
 
     def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
         """

@@ -1,6 +1,8 @@
 """Tests for NLP variable scaling."""
 
+import numpy as np
 import pytest
+from openap.aero import fpm, ft
 
 from openap import top
 
@@ -45,3 +47,39 @@ class TestScalingInfrastructure:
         optimizer.reset_scaling()
         assert optimizer.scale_x == 1.0
         assert optimizer.scale_m == 1.0
+
+
+class TestCruiseScaling:
+    """Tests for Cruise with scaling enabled."""
+
+    def test_init_conditions_scaling_sets_factors(self):
+        """When scaling=True, init_conditions should set non-trivial scale factors."""
+        optimizer = top.Cruise("A320", "EHAM", "EDDF", 0.85)
+        optimizer.init_conditions(scaling=True)
+        assert optimizer.scale_x > 1.0
+        assert optimizer.scale_m > 1.0
+        assert optimizer.scale_t > 1.0
+
+    def test_init_conditions_no_scaling_keeps_defaults(self):
+        """When scaling=False, init_conditions should reset factors to 1.0."""
+        optimizer = top.Cruise("A320", "EHAM", "EDDF", 0.85)
+        optimizer.init_conditions(scaling=True)
+        assert optimizer.scale_x > 1.0
+        optimizer.init_conditions(scaling=False)
+        assert optimizer.scale_x == 1.0
+        assert optimizer.scale_m == 1.0
+
+    def test_scaled_bounds_are_order_one(self):
+        """Scaled bounds should be roughly O(1)."""
+        optimizer = top.Cruise("A320", "EHAM", "EDDF", 0.85)
+        optimizer.init_conditions(scaling=True)
+        for val in optimizer.x_lb + optimizer.x_ub:
+            assert abs(val) < 100, f"Bound {val} is not O(1)"
+
+    def test_scaled_guess_is_order_one(self):
+        """Scaled initial guess should be roughly O(1)."""
+        optimizer = top.Cruise("A320", "EHAM", "EDDF", 0.85)
+        optimizer.init_conditions(scaling=True)
+        for row in optimizer.x_guess:
+            for val in row:
+                assert abs(val) < 100, f"Guess value {val} is not O(1)"
