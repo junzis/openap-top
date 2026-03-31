@@ -64,35 +64,65 @@ class CompleteFlight(Base):
         hdg = oc.geo.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
         psi = hdg * pi / 180
 
+        # --- Scaling ---
+        scaling = kwargs.get("scaling", False)
+        if scaling:
+            self.set_scaling(
+                scale_x=max(abs(x_max - x_min) / 2, 1.0),
+                scale_y=max(abs(y_max - y_min) / 2, 1.0),
+                scale_h=max(h_max, 1.0),
+                scale_m=max(self.mass_init, 1.0),
+                scale_t=max(ts_max, 1.0),
+                scale_mach=1.0,
+                scale_vs=2500 * fpm,
+                scale_psi=np.pi,
+                scale_force=50000.0,
+                scale_energy=1e6,
+                scale_obj=1.0,
+            )
+        else:
+            self.reset_scaling()
+
+        sx = self.scale_x
+        sy = self.scale_y
+        sh = self.scale_h
+        sm = self.scale_m
+        st = self.scale_t
+        smach = self.scale_mach
+        svs = self.scale_vs
+        spsi = self.scale_psi
+
         # Initial conditions - Lower upper bounds
-        self.x_0_lb = [xp_0, yp_0, h_min, self.mass_init, ts_min]
-        self.x_0_ub = [xp_0, yp_0, h_min, self.mass_init, ts_min]
+        self.x_0_lb = [xp_0/sx, yp_0/sy, h_min/sh, self.mass_init/sm, ts_min/st]
+        self.x_0_ub = [xp_0/sx, yp_0/sy, h_min/sh, self.mass_init/sm, ts_min/st]
 
         # Final conditions - Lower and upper bounds
-        self.x_f_lb = [xp_f, yp_f, h_min, self.oew * 0.5, ts_min]
-        self.x_f_ub = [xp_f, yp_f, h_min, self.mass_init, ts_max]
+        self.x_f_lb = [xp_f/sx, yp_f/sy, h_min/sh, (self.oew * 0.5)/sm, ts_min/st]
+        self.x_f_ub = [xp_f/sx, yp_f/sy, h_min/sh, self.mass_init/sm, ts_max/st]
 
         # States - Lower and upper bounds
-        self.x_lb = [x_min, y_min, h_min, self.oew * 0.5, ts_min]
-        self.x_ub = [x_max, y_max, h_max, self.mass_init, ts_max]
+        self.x_lb = [x_min/sx, y_min/sy, h_min/sh, (self.oew * 0.5)/sm, ts_min/st]
+        self.x_ub = [x_max/sx, y_max/sy, h_max/sh, self.mass_init/sm, ts_max/st]
 
         # Control init - lower and upper bounds
-        self.u_0_lb = [0.1, 500 * fpm, psi]
-        self.u_0_ub = [0.3, 2500 * fpm, psi]
+        self.u_0_lb = [0.1/smach, (500 * fpm)/svs, psi/spsi]
+        self.u_0_ub = [0.3/smach, (2500 * fpm)/svs, psi/spsi]
 
         # Control final - lower and upper bounds
-        self.u_f_lb = [0.1, -1500 * fpm, psi]
-        self.u_f_ub = [0.3, -300 * fpm, psi]
+        self.u_f_lb = [0.1/smach, (-1500 * fpm)/svs, psi/spsi]
+        self.u_f_ub = [0.3/smach, (-300 * fpm)/svs, psi/spsi]
 
         # Control - Lower and upper bound
-        self.u_lb = [0.1, -2500 * fpm, psi - pi / 2]
-        self.u_ub = [self.mach_max, 2500 * fpm, psi + pi / 2]
+        self.u_lb = [0.1/smach, (-2500 * fpm)/svs, (psi - pi / 2)/spsi]
+        self.u_ub = [self.mach_max/smach, (2500 * fpm)/svs, (psi + pi / 2)/spsi]
 
-        # Initial guess for the states
+        # Initial guess for the states (compute in physical units, then scale)
         self.x_guess = self.initial_guess()
+        for i in range(len(self.x_guess)):
+            self.x_guess[i] = self.scale_state(self.x_guess[i])
 
         # Control - guesses
-        self.u_guess = [0.6, 1000 * fpm, psi]
+        self.u_guess = [0.6/smach, (1000 * fpm)/svs, psi/spsi]
 
     def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
         """
@@ -125,9 +155,13 @@ class CompleteFlight(Base):
 
         customized_max_fuel = kwargs.get("max_fuel", None)
 
+        scaling = kwargs.get("scaling", False)
+
         initial_guess = kwargs.get("initial_guess", None)
         if initial_guess is not None:
             self.x_guess = self.initial_guess(initial_guess)
+            for i in range(len(self.x_guess)):
+                self.x_guess[i] = self.scale_state(self.x_guess[i])
 
         return_failed = kwargs.get("return_failed", False)
 
@@ -195,7 +229,10 @@ class CompleteFlight(Base):
                     xpc = xpc + C[r + 1, j] * Xc[r]
 
                 # Append collocation equations
-                fj, qj = self.func_dynamics(Xc[j - 1], Uk)
+                if scaling:
+                    fj, qj = self.scaled_dynamics(Xc[j - 1], Uk)
+                else:
+                    fj, qj = self.func_dynamics(Xc[j - 1], Uk)
                 g.append(self.dt * fj - xpc)
                 lbg.append([0] * nstates)
                 ubg.append([0] * nstates)
@@ -230,7 +267,7 @@ class CompleteFlight(Base):
         w.append(self.ts_final)
         lbw.append([0])
         ubw.append([ca.inf])
-        w0.append([7200])
+        w0.append([7200 / self.scale_t])
 
         # constrain altitude during cruise for long cruise flights
         if self.range > 1500_000:
@@ -243,12 +280,12 @@ class CompleteFlight(Base):
             for k in range(idx_toc, idx_tod):
                 # minimum avoid large changes in altitude
                 g.append(U[k][1])
-                lbg.append([-500 * fpm])
-                ubg.append([500 * fpm])
+                lbg.append([(-500 * fpm) / self.scale_vs])
+                ubg.append([(500 * fpm) / self.scale_vs])
 
                 # minimum cruise alt FL150
                 g.append(X[k][2])
-                lbg.append([15000 * ft])
+                lbg.append([(15000 * ft) / self.scale_h])
                 ubg.append([ca.inf])
 
             for k in range(0, idx_toc):
@@ -264,18 +301,20 @@ class CompleteFlight(Base):
         # force and energy constraint
         for k in range(self.nodes):
             S = self.aircraft["wing"]["area"]
-            cd0 = self.drag.polar["clean"]["cd0"]
-            ck = self.drag.polar["clean"]["k"]
-            mass = X[k][3]
-            v = oc.aero.mach2tas(U[k][0], X[k][2], dT=self.dT)
+            # Unscale state/control for physical constraint evaluation
+            mass = X[k][3] * self.scale_m
+            h = X[k][2] * self.scale_h
+            mach = U[k][0] * self.scale_mach
+            vs_phys = U[k][1] * self.scale_vs
+            v = oc.aero.mach2tas(mach, h, dT=self.dT)
             tas = v / kts
-            alt = X[k][2] / ft
-            rho = oc.aero.density(X[k][2], dT=self.dT)
+            alt = h / ft
+            rho = oc.aero.density(h, dT=self.dT)
             thrust_max = self.thrust.cruise(tas, alt, dT=self.dT)
             drag = self.drag.clean(mass, tas, alt, dT=self.dT)
 
             # max_thrust > drag (5% margin)
-            g.append(thrust_max * 0.95 - drag)
+            g.append((thrust_max * 0.95 - drag) / self.scale_force)
             lbg.append([0])
             ubg.append([ca.inf])
 
@@ -286,47 +325,48 @@ class CompleteFlight(Base):
             ck = self.drag.polar["clean"]["k"]
             cl_max = ca.sqrt(ca.fmax(1e-10, (cd_max - cd0) / ck))
             L_max = cl_max * 0.5 * rho * v**2 * S
-            g.append(L_max * 0.8 - mass * oc.aero.g0)
+            g.append((L_max * 0.8 - mass * oc.aero.g0) / self.scale_force)
             lbg.append([0])
             ubg.append([ca.inf])
 
             # excess energy > change potential energy
-            excess_energy = (thrust_max - drag) * v - mass * oc.aero.g0 * U[k][1]
-            g.append(excess_energy)
+            excess_energy = (thrust_max - drag) * v - mass * oc.aero.g0 * vs_phys
+            g.append(excess_energy / self.scale_energy)
             lbg.append([0])
             ubg.append([ca.inf])
 
         # ts and dt should be consistent
         for k in range(self.nodes - 1):
             g.append(X[k + 1][4] - X[k][4] - self.dt)
-            lbg.append([-1])
-            ubg.append([1])
+            lbg.append([-1.0 / self.scale_t])
+            ubg.append([1.0 / self.scale_t])
 
         # smooth Mach number change
         for k in range(self.nodes - 1):
             g.append(U[k + 1][0] - U[k][0])
-            lbg.append([-0.2])
-            ubg.append([0.2])  # to be tunned
+            lbg.append([-0.2 / self.scale_mach])
+            ubg.append([0.2 / self.scale_mach])  # to be tunned
 
         # smooth vertical rate change
         for k in range(self.nodes - 1):
             g.append(U[k + 1][1] - U[k][1])
-            lbg.append([-500 * fpm])
-            ubg.append([500 * fpm])  # to be tunned
+            lbg.append([(-500 * fpm) / self.scale_vs])
+            ubg.append([(500 * fpm) / self.scale_vs])  # to be tunned
 
         # smooth heading change
         for k in range(self.nodes - 1):
             g.append(U[k + 1][2] - U[k][2])
-            lbg.append([-15 * pi / 180])
-            ubg.append([15 * pi / 180])
+            lbg.append([(-15 * pi / 180) / self.scale_psi])
+            ubg.append([(15 * pi / 180) / self.scale_psi])
 
-        # add fuel constraint
-        g.append(X[0][3] - X[-1][3])
+        # add fuel constraint (in scaled units)
+        fuel_consumed = X[0][3] - X[-1][3]
+        g.append(fuel_consumed)
         lbg.append([0])
-        ubg.append([self.fuel_max])
+        ubg.append([self.fuel_max / self.scale_m])
 
         if customized_max_fuel is not None:
-            g.append(X[0][3] - X[-1][3] - customized_max_fuel)
+            g.append(fuel_consumed - customized_max_fuel / self.scale_m)
             lbg.append([-ca.inf])
             ubg.append([0])
 
@@ -349,11 +389,25 @@ class CompleteFlight(Base):
         self.solution = self.solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
 
         # final timestep
-        ts_final = self.solution["x"][-1].full()[0][0]
+        ts_final = self.solution["x"][-1].full()[0][0] * self.scale_t
 
         # Function to get x and u from w
         output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
         x_opt, u_opt = output(self.solution["x"])
+
+        # Unscale solution back to physical units
+        x_np = x_opt.full()
+        u_np = u_opt.full()
+        x_np[0, :] *= self.scale_x
+        x_np[1, :] *= self.scale_y
+        x_np[2, :] *= self.scale_h
+        x_np[3, :] *= self.scale_m
+        x_np[4, :] *= self.scale_t
+        u_np[0, :] *= self.scale_mach
+        u_np[1, :] *= self.scale_vs
+        u_np[2, :] *= self.scale_psi
+        x_opt = ca.DM(x_np)
+        u_opt = ca.DM(u_np)
 
         df = self.to_trajectory(ts_final, x_opt, u_opt, **kwargs)
 

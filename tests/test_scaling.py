@@ -115,3 +115,55 @@ class TestCruiseScaling:
             fuel_unscaled = df_unscaled.mass.iloc[0] - df_unscaled.mass.iloc[-1]
             fuel_scaled = df_scaled.mass.iloc[0] - df_scaled.mass.iloc[-1]
             assert abs(fuel_scaled - fuel_unscaled) / fuel_unscaled < 0.10
+
+
+class TestCompleteFlightScaling:
+    """Tests for CompleteFlight with scaling enabled."""
+
+    def test_init_conditions_scaling_sets_factors(self):
+        """When scaling=True, init_conditions should set non-trivial scale factors."""
+        optimizer = top.CompleteFlight("A320", "EHAM", "EDDF", 0.85)
+        optimizer.init_conditions(scaling=True)
+        assert optimizer.scale_x > 1.0
+        assert optimizer.scale_m > 1.0
+
+    def test_init_conditions_no_scaling_resets(self):
+        """Calling init_conditions(scaling=False) after scaling=True resets factors."""
+        optimizer = top.CompleteFlight("A320", "EHAM", "EDDF", 0.85)
+        optimizer.init_conditions(scaling=True)
+        assert optimizer.scale_x > 1.0
+        optimizer.init_conditions(scaling=False)
+        assert optimizer.scale_x == 1.0
+
+    def test_complete_flight_trajectory_with_scaling(self, aircraft_type, short_flight):
+        """CompleteFlight with scaling=True should produce a valid trajectory."""
+        optimizer = top.CompleteFlight(
+            aircraft_type,
+            short_flight["origin"],
+            short_flight["destination"],
+            short_flight["m0"],
+        )
+        df = optimizer.trajectory(objective="fuel", scaling=True)
+
+        assert df is not None
+        assert len(df) > 0
+        assert df.altitude.iloc[0] < 1000
+        assert df.altitude.iloc[-1] < 1000
+        assert df.altitude.max() > 20000
+        assert df.mass.iloc[-1] < df.mass.iloc[0]
+
+    def test_complete_flight_scaling_vs_unscaled_similar(self, aircraft_type, short_flight):
+        """Scaled and unscaled CompleteFlight should produce similar fuel burn."""
+        optimizer = top.CompleteFlight(
+            aircraft_type,
+            short_flight["origin"],
+            short_flight["destination"],
+            short_flight["m0"],
+        )
+        df_unscaled = optimizer.trajectory(objective="fuel", scaling=False)
+        df_scaled = optimizer.trajectory(objective="fuel", scaling=True)
+
+        if df_unscaled is not None and df_scaled is not None:
+            fuel_unscaled = df_unscaled.mass.iloc[0] - df_unscaled.mass.iloc[-1]
+            fuel_scaled = df_scaled.mass.iloc[0] - df_scaled.mass.iloc[-1]
+            assert abs(fuel_scaled - fuel_unscaled) / fuel_unscaled < 0.10
