@@ -83,3 +83,35 @@ class TestCruiseScaling:
         for row in optimizer.x_guess:
             for val in row:
                 assert abs(val) < 100, f"Guess value {val} is not O(1)"
+
+    def test_cruise_trajectory_with_scaling(self, aircraft_type, short_flight):
+        """Cruise with scaling=True should produce a valid trajectory."""
+        optimizer = top.Cruise(
+            aircraft_type,
+            short_flight["origin"],
+            short_flight["destination"],
+            short_flight["m0"],
+        )
+        df = optimizer.trajectory(objective="fuel", scaling=True)
+
+        assert df is not None
+        assert len(df) > 0
+        assert df.altitude.min() > 20000
+        assert df.altitude.max() < 45000
+        assert df.mass.iloc[-1] < df.mass.iloc[0]
+
+    def test_cruise_scaling_vs_unscaled_similar(self, aircraft_type, short_flight):
+        """Scaled and unscaled Cruise should produce similar fuel burn."""
+        optimizer = top.Cruise(
+            aircraft_type,
+            short_flight["origin"],
+            short_flight["destination"],
+            short_flight["m0"],
+        )
+        df_unscaled = optimizer.trajectory(objective="fuel", scaling=False)
+        df_scaled = optimizer.trajectory(objective="fuel", scaling=True)
+
+        if df_unscaled is not None and df_scaled is not None:
+            fuel_unscaled = df_unscaled.mass.iloc[0] - df_unscaled.mass.iloc[-1]
+            fuel_scaled = df_scaled.mass.iloc[0] - df_scaled.mass.iloc[-1]
+            assert abs(fuel_scaled - fuel_unscaled) / fuel_unscaled < 0.10

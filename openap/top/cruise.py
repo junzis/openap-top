@@ -140,9 +140,13 @@ class Cruise(Base):
 
         customized_max_fuel = kwargs.get("max_fuel", None)
 
+        scaling = kwargs.get("scaling", False)
+
         initial_guess = kwargs.get("initial_guess", None)
         if initial_guess is not None:
             self.x_guess = self.initial_guess(initial_guess)
+            for i in range(len(self.x_guess)):
+                self.x_guess[i] = self.scale_state(self.x_guess[i])
 
         return_failed = kwargs.get("return_failed", False)
 
@@ -210,7 +214,10 @@ class Cruise(Base):
                     xpc = xpc + C[r + 1, j] * Xc[r]
 
                 # Append collocation equations
-                fj, qj = self.func_dynamics(Xc[j - 1], Uk)
+                if scaling:
+                    fj, qj = self.scaled_dynamics(Xc[j - 1], Uk)
+                else:
+                    fj, qj = self.func_dynamics(Xc[j - 1], Uk)
                 g.append(self.dt * fj - xpc)
                 lbg.append([0] * nstates)
                 ubg.append([0] * nstates)
@@ -248,20 +255,24 @@ class Cruise(Base):
         w.append(self.ts_final)
         lbw.append([0])
         ubw.append([ca.inf])
-        w0.append([self.range * 1000 / 200])
+        w0.append([self.range * 1000 / 200 / self.scale_t])
 
-        # aircraft performane constraints
+        # aircraft performance constraints
         for k in range(self.nodes):
             S = self.aircraft["wing"]["area"]
-            mass = X[k][3]
-            v = oc.aero.mach2tas(U[k][0], X[k][2], dT=self.dT)
+            # Unscale state/control for physical constraint evaluation
+            mass = X[k][3] * self.scale_m
+            h = X[k][2] * self.scale_h
+            mach = U[k][0] * self.scale_mach
+            v = oc.aero.mach2tas(mach, h, dT=self.dT)
             tas = v / kts
-            alt = X[k][2] / ft
-            rho = oc.aero.density(X[k][2], dT=self.dT)
+            alt = h / ft
+            rho = oc.aero.density(h, dT=self.dT)
             thrust_max = self.thrust.cruise(tas, alt, dT=self.dT)
+            drag = self.drag.clean(mass, tas, alt, dT=self.dT)
 
             # max_thrust * 95% > drag (5% margin)
-            g.append(thrust_max * 0.95 - self.drag.clean(mass, tas, alt, dT=self.dT))
+            g.append((thrust_max * 0.95 - drag) / self.scale_force)
             lbg.append([0])
             ubg.append([ca.inf])
 
@@ -272,15 +283,15 @@ class Cruise(Base):
             ck = self.drag.polar["clean"]["k"]
             cl_max = ca.sqrt(ca.fmax(1e-10, (cd_max - cd0) / ck))
             L_max = cl_max * 0.5 * rho * v**2 * S
-            g.append(L_max * 0.8 - mass * oc.aero.g0)
+            g.append((L_max * 0.8 - mass * oc.aero.g0) / self.scale_force)
             lbg.append([0])
             ubg.append([ca.inf])
 
         # ts and dt should be consistent
         for k in range(self.nodes - 1):
             g.append(X[k + 1][4] - X[k][4] - self.dt)
-            lbg.append([-1])
-            ubg.append([1])
+            lbg.append([-1.0 / self.scale_t])
+            ubg.append([1.0 / self.scale_t])
 
         # # smooth Mach number change
         # for k in range(self.nodes - 1):
@@ -297,8 +308,8 @@ class Cruise(Base):
         # smooth heading change
         for k in range(self.nodes - 1):
             g.append(U[k + 1][2] - U[k][2])
-            lbg.append([-15 * pi / 180])
-            ubg.append([15 * pi / 180])
+            lbg.append([(-15 * pi / 180) / self.scale_psi])
+            ubg.append([(15 * pi / 180) / self.scale_psi])
 
         # optional constraints
         if self.fix_mach:
@@ -325,13 +336,14 @@ class Cruise(Base):
                 lbg.append([0])
                 ubg.append([ca.inf])
 
-        # add fuel constraint
-        g.append(X[0][3] - X[-1][3])
+        # add fuel constraint (in scaled units)
+        fuel_consumed = X[0][3] - X[-1][3]
+        g.append(fuel_consumed)
         lbg.append([0])
-        ubg.append([self.fuel_max])
+        ubg.append([self.fuel_max / self.scale_m])
 
         if customized_max_fuel is not None:
-            g.append(X[0][3] - X[-1][3] - customized_max_fuel)
+            g.append(fuel_consumed - customized_max_fuel / self.scale_m)
             lbg.append([-ca.inf])
             ubg.append([0])
 
@@ -353,11 +365,25 @@ class Cruise(Base):
         self.solution = self.solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
 
         # final timestep
-        ts_final = self.solution["x"][-1].full()[0][0]
+        ts_final = self.solution["x"][-1].full()[0][0] * self.scale_t
 
         # Function to get x and u from w
         output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
         x_opt, u_opt = output(self.solution["x"])
+
+        # Unscale solution back to physical units
+        x_np = x_opt.full()
+        u_np = u_opt.full()
+        x_np[0, :] *= self.scale_x
+        x_np[1, :] *= self.scale_y
+        x_np[2, :] *= self.scale_h
+        x_np[3, :] *= self.scale_m
+        x_np[4, :] *= self.scale_t
+        u_np[0, :] *= self.scale_mach
+        u_np[1, :] *= self.scale_vs
+        u_np[2, :] *= self.scale_psi
+        x_opt = ca.DM(x_np)
+        u_opt = ca.DM(u_np)
 
         df = self.to_trajectory(ts_final, x_opt, u_opt, **kwargs)
 
