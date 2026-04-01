@@ -142,7 +142,9 @@ class Base:
             f_unscaled[3] * (self.scale_t / self.scale_m),
             f_unscaled[4],  # dt/dt = 1, no scaling needed
         )
-        q_scaled = q_unscaled * self.scale_t / self.scale_obj
+        # scale_t factor accounts for dt_scaled = dt_phys / scale_t
+        # in the collocation quadrature: ∫L dt = ∫L scale_t dt_scaled
+        q_scaled = q_unscaled * self.scale_t
         return f_scaled, q_scaled
 
     def scale_state(self, x):
