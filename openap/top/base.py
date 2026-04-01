@@ -381,7 +381,7 @@ class Base:
             self.solver_options[f"ipopt.{key}"] = value
 
     def init_model(self, objective, **kwargs):
-        autoscale_cost = kwargs.get("auto_scale_cost", False)
+        scaling = kwargs.get("scaling", False)
 
         # Model variables
         xp = ca.MX.sym("xp")
@@ -414,13 +414,14 @@ class Base:
 
         L = self.objective(self.x, self.u, self.dt, **kwargs)
 
-        if autoscale_cost:
+        if scaling:
             # scale objective based on initial guess
             x0 = self.x_guess.T
             u0 = self.u_guess
             dt0 = self.range / 200 / self.nodes
             cost = np.sum(self.objective(x0, u0, dt0, symbolic=False, **kwargs))
-            L = L / cost * 1e3
+            if cost > 0:
+                L = L / cost * 1e3
 
         # Continuous time dynamics
         self.func_dynamics = ca.Function(

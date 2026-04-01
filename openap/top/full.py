@@ -136,7 +136,6 @@ class CompleteFlight(Base):
                 usually a exsiting flight trajectory.
             - return_failed (bool): If True, returns the DataFrame even if the
                 optimization fails. Default is False.
-            - autoscale_cost (bool): If True, objective is scaled based on initial guess
 
 
         Returns:
