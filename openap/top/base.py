@@ -289,8 +289,6 @@ class Base:
             self.solver_options[f"ipopt.{key}"] = value
 
     def init_model(self, objective, **kwargs):
-        autoscale_cost = kwargs.get("auto_scale_cost", False)
-
         # Model variables
         xp = ca.MX.sym("xp")
         yp = ca.MX.sym("yp")
@@ -310,7 +308,7 @@ class Base:
         # Control discretization
         self.dt = self.ts_final / self.nodes
 
-        # Handel objective function
+        # Handle objective function
         if isinstance(objective, Callable):
             self.objective = objective
         elif objective.lower().startswith("ci:"):
@@ -321,14 +319,6 @@ class Base:
             self.objective = getattr(self, f"obj_{objective}")
 
         L = self.objective(self.x, self.u, self.dt, **kwargs)
-
-        if autoscale_cost:
-            # scale objective based on initial guess
-            x0 = self.x_guess.T
-            u0 = self.u_guess
-            dt0 = self.range / 200 / self.nodes
-            cost = np.sum(self.objective(x0, u0, dt0, symbolic=False, **kwargs))
-            L = L / cost * 1e3
 
         # Continuous time dynamics
         self.func_dynamics = ca.Function(
@@ -505,28 +495,6 @@ class Base:
             cost *= dt
 
         return cost
-
-    def obj_combo(self, x, u, dt, obj1, obj2, ratio=0.5, **kwargs):
-        if isinstance(obj1, str):
-            obj1 = getattr(self, f"obj_{obj1}")
-
-        if isinstance(obj2, str):
-            obj2 = getattr(self, f"obj_{obj2}")
-
-        x0 = self.x_guess.T
-        u0 = self.u_guess
-        dt0 = self.range / 200 / self.nodes
-
-        kwargs_ = kwargs.copy()
-        kwargs_["symbolic"] = False
-
-        n1 = obj1(x0, u0, dt0, **kwargs_).sum()
-        n2 = obj2(x0, u0, dt0, **kwargs_).sum()
-
-        c1 = obj1(x, u, dt, **kwargs)
-        c2 = obj2(x, u, dt, **kwargs)
-
-        return ratio * c1 / n1 + (1 - ratio) * c2 / n2
 
     def to_trajectory(self, ts_final, x_opt, u_opt, **kwargs):
         """Convert optimization results to a trajectory DataFrame.
