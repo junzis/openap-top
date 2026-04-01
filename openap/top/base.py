@@ -375,14 +375,13 @@ class Base:
             "ipopt.mu_strategy": "adaptive",
             "ipopt.alpha_for_y": alpha_for_y,
             "ipopt.hessian_approximation": hessian_approximation,
+            "ipopt.nlp_scaling_method": "gradient-based",
         }
 
         for key, value in ipopt_kwargs.items():
             self.solver_options[f"ipopt.{key}"] = value
 
     def init_model(self, objective, **kwargs):
-        scaling = kwargs.get("scaling", False)
-
         # Model variables
         xp = ca.MX.sym("xp")
         yp = ca.MX.sym("yp")
@@ -413,15 +412,6 @@ class Base:
             self.objective = getattr(self, f"obj_{objective}")
 
         L = self.objective(self.x, self.u, self.dt, **kwargs)
-
-        if scaling:
-            # scale objective based on initial guess
-            x0 = self.x_guess.T
-            u0 = self.u_guess
-            dt0 = self.range / 200 / self.nodes
-            cost = np.sum(self.objective(x0, u0, dt0, symbolic=False, **kwargs))
-            if cost > 0:
-                L = L / cost * 1e3
 
         # Continuous time dynamics
         self.func_dynamics = ca.Function(
