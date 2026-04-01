@@ -272,7 +272,7 @@ class Cruise(Base):
             drag = self.drag.clean(mass, tas, alt, dT=self.dT)
 
             # max_thrust * 95% > drag (5% margin)
-            g.append((thrust_max * 0.95 - drag) / self.scale_force)
+            g.append(thrust_max * 0.95 - drag)
             lbg.append([0])
             ubg.append([ca.inf])
 
@@ -283,7 +283,7 @@ class Cruise(Base):
             ck = self.drag.polar["clean"]["k"]
             cl_max = ca.sqrt(ca.fmax(1e-10, (cd_max - cd0) / ck))
             L_max = cl_max * 0.5 * rho * v**2 * S
-            g.append((L_max * 0.8 - mass * oc.aero.g0) / self.scale_force)
+            g.append(L_max * 0.8 - mass * oc.aero.g0)
             lbg.append([0])
             ubg.append([ca.inf])
 

@@ -142,9 +142,13 @@ class Base:
             f_unscaled[3] * (self.scale_t / self.scale_m),
             f_unscaled[4],  # dt/dt = 1, no scaling needed
         )
-        # scale_t factor accounts for dt_scaled = dt_phys / scale_t
-        # in the collocation quadrature: ∫L dt = ∫L scale_t dt_scaled
-        q_scaled = q_unscaled * self.scale_t
+        # No scaling on q: the objective already uses self.dt (which is in
+        # scaled time), so J is uniformly scaled by 1/scale_t. This constant
+        # factor doesn't change the optimum and IPOPT's gradient-based NLP
+        # scaling handles the magnitude. Crucially, NOT multiplying by scale_t
+        # preserves the ratio between dt-dependent terms (fuel) and
+        # dt-independent terms (grid cost with time_dependent=False).
+        q_scaled = q_unscaled
         return f_scaled, q_scaled
 
     def scale_state(self, x):
