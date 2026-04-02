@@ -84,16 +84,6 @@ class Base:
             use_synonym=self.use_synonym,
         )
 
-        # from pyproj import Proj
-        # self.proj = Proj(
-        #     proj="lcc",
-        #     ellps="WGS84",
-        #     lat_1=min(self.lat1, self.lat2),
-        #     lat_2=max(self.lat1, self.lat2),
-        #     lat_0=(self.lat1 + self.lat2) / 2,
-        #     lon_0=(self.lon1 + self.lon2) / 2,
-        # )
-
         self.wind = None
 
         # Check cruise range
@@ -531,7 +521,7 @@ class Base:
         return obj
 
     # Climate metric coefficients: (h2o, nox, sox, soot)
-    # CO2 coefficient is always 1. Source: Grewe & Dahlmann (2015)
+    # CO2 coefficient is always 1.
     _CLIMATE_COEFF: ClassVar[dict] = {
         "gwp20": (0.22, 619, -832, 4288),
         "gwp50": (0.1, 205, -392, 2018),
