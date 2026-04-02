@@ -137,7 +137,7 @@ def construct_interpolant(
 def interp_grid(
     longitude, latitude, height, grid_value, timestamp=None, shape="linear"
 ):
-    raise DeprecationWarning(
+    raise NotImplementedError(
         "Function interp_grid() is deprecated, "
         "use interpolant_from_dataframe() instead."
     )

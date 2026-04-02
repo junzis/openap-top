@@ -274,6 +274,7 @@ class Base:
             print_time = 0
 
         self.solver_options = {
+            # Convert Opti bounded() constraints to IPOPT variable bounds (lbx/ubx)
             "detect_simple_bounds": True,
             "print_time": print_time,
             "calc_lam_p": False,
@@ -454,7 +455,9 @@ class Base:
 
         try:
             sol = self._opti.solve()
-        except RuntimeError:
+        except RuntimeError as e:
+            if self.debug:
+                warnings.warn(f"Solver failed: {e}")
             sol = self._opti.debug
 
         # Backward compatibility: self.solver.stats() and self.solution["f"]
