@@ -1,5 +1,5 @@
 import warnings
-from typing import Callable, Union
+from typing import Callable, ClassVar, Union
 
 import casadi as ca
 import openap.casadi as oc
@@ -306,10 +306,15 @@ class Base:
         # Handle objective function
         if isinstance(objective, Callable):
             self.objective = objective
-        elif objective.lower().startswith("ci:"):
+        elif isinstance(objective, str) and objective.lower().startswith("ci:"):
             ci = int(objective[3:])
             kwargs["ci"] = ci
             self.objective = self.obj_ci
+        elif isinstance(objective, str) and objective in self._CLIMATE_COEFF:
+            metric = objective
+            self.objective = lambda x, u, dt, **kw: self._obj_climate(
+                x, u, dt, metric, **kw
+            )
         else:
             self.objective = getattr(self, f"obj_{objective}")
 
@@ -525,40 +530,21 @@ class Base:
         obj = ci / 100 * time_cost + (1 - ci / 100) * fuel_cost
         return obj
 
-    def obj_gwp20(self, x, u, dt, **kwargs):
-        co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
-        cost = co2 + 0.22 * h2o + 619 * nox - 832 * sox + 4288 * soot
-        # cost = cost * 1e-3
-        return cost * dt
+    # Climate metric coefficients: (h2o, nox, sox, soot)
+    # CO2 coefficient is always 1. Source: Grewe & Dahlmann (2015)
+    _CLIMATE_COEFF: ClassVar[dict] = {
+        "gwp20": (0.22, 619, -832, 4288),
+        "gwp50": (0.1, 205, -392, 2018),
+        "gwp100": (0.06, 114, -226, 1166),
+        "gtp20": (0.07, -222, -241, 1245),
+        "gtp50": (0.01, -69, -38, 195),
+        "gtp100": (0.008, 13, -31, 161),
+    }
 
-    def obj_gwp50(self, x, u, dt, **kwargs):
+    def _obj_climate(self, x, u, dt, metric, **kwargs):
         co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
-        cost = co2 + 0.1 * h2o + 205 * nox - 392 * sox + 2018 * soot
-        # cost = cost * 1e-3
-        return cost * dt
-
-    def obj_gwp100(self, x, u, dt, **kwargs):
-        co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
-        cost = co2 + 0.06 * h2o + 114 * nox - 226 * sox + 1166 * soot
-        # cost = cost * 1e-3
-        return cost * dt
-
-    def obj_gtp20(self, x, u, dt, **kwargs):
-        co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
-        cost = co2 + 0.07 * h2o - 222 * nox - 241 * sox + 1245 * soot
-        # cost = cost * 1e-3
-        return cost * dt
-
-    def obj_gtp50(self, x, u, dt, **kwargs):
-        co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
-        cost = co2 + 0.01 * h2o - 69 * nox - 38 * sox + 195 * soot
-        # cost = cost * 1e-3
-        return cost * dt
-
-    def obj_gtp100(self, x, u, dt, **kwargs):
-        co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
-        cost = co2 + 0.008 * h2o + 13 * nox - 31 * sox + 161 * soot
-        # cost = cost * 1e-3
+        c_h2o, c_nox, c_sox, c_soot = self._CLIMATE_COEFF[metric]
+        cost = co2 + c_h2o * h2o + c_nox * nox + c_sox * sox + c_soot * soot
         return cost * dt
 
     def obj_grid_cost(self, x, u, dt, **kwargs):
