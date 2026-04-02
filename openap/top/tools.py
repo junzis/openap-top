@@ -119,9 +119,9 @@ def construct_interpolant(
     assert shape in ["linear", "bspline"]
 
     if max(height) > 20_000:
-        raise Warning(
-            """Grid contains heights above 20,000 meters. You 'height' might be feet
-            Make sure the 'height' values are in meters."""
+        raise ValueError(
+            "Grid contains heights above 20,000 meters. "
+            "Your 'height' values might be in feet — they must be in meters."
         )
 
     if timestamp is None:
