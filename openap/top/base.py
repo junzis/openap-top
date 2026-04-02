@@ -12,7 +12,7 @@ import pandas as pd
 try:
     from . import tools
 except Exception:
-    RuntimeWarning("cfgrib and sklearn are required for wind integration")
+    warnings.warn("cfgrib and sklearn are required for wind integration")
 
 
 class Base:
@@ -240,9 +240,11 @@ class Base:
         nodes: int | None = None,
         polydeg: int = 3,
         debug=False,
-        ipopt_kwargs={},
+        ipopt_kwargs=None,
         **kwargs,
     ):
+        if ipopt_kwargs is None:
+            ipopt_kwargs = {}
         if nodes is not None:
             self.nodes = nodes
         else:
@@ -272,6 +274,7 @@ class Base:
             print_time = 0
 
         self.solver_options = {
+            "detect_simple_bounds": True,
             "print_time": print_time,
             "calc_lam_p": False,
             "ipopt.print_level": ipopt_print,
@@ -303,10 +306,7 @@ class Base:
         self.x = ca.vertcat(xp, yp, h, m, ts)
         self.u = ca.vertcat(mach, vs, psi)
 
-        self.ts_final = ca.MX.sym("ts_final")
-
-        # Control discretization
-        self.dt = self.ts_final / self.nodes
+        # self.ts_final and self.dt are set by _build_opti() before this call
 
         # Handle objective function
         if isinstance(objective, Callable):
@@ -329,6 +329,143 @@ class Base:
             ["xdot", "L"],
             {"allow_free": True},
         )
+
+    class _SolverCompat:
+        """Wrapper to maintain backward compatibility with ca.nlpsol interface."""
+
+        def __init__(self, stats_dict):
+            self._stats = stats_dict
+
+        def stats(self):
+            return self._stats
+
+    def _build_opti(self, objective, ts_final_guess, **kwargs):
+        """Build CasADi Opti problem with direct collocation structure.
+
+        Creates the Opti instance, free final time variable, calls init_model,
+        and builds the collocation equations, variable bounds, and initial guesses.
+
+        Must be called after init_conditions() which sets the bound attributes.
+
+        Args:
+            objective: Objective function name or callable.
+            ts_final_guess: Initial guess for total flight time (seconds).
+            **kwargs: Passed through to init_model().
+
+        Returns:
+            tuple: (X, U) where X is list of state MX vars at each node boundary
+                   (length nodes+1), U is list of control MX vars (length nodes).
+        """
+        self._opti = ca.Opti()
+
+        # Free final time — must be set before init_model
+        self.ts_final = self._opti.variable()
+        self._opti.subject_to(self.ts_final >= 0)
+        self._opti.set_initial(self.ts_final, ts_final_guess)
+        self.dt = self.ts_final / self.nodes
+
+        # Build dynamics function (captures self.dt with free ts_final)
+        self.init_model(objective, **kwargs)
+
+        C, D, B = self.collocation_coeff()
+        nstates = self.x.shape[0]
+
+        X = []  # States at node boundaries (length: nodes + 1)
+        U = []  # Controls at each node (length: nodes)
+        J = 0  # Objective accumulator
+
+        # Initial state
+        Xk = self._opti.variable(nstates)
+        self._opti.subject_to(
+            self._opti.bounded(self.x_0_lb, Xk, self.x_0_ub)
+        )
+        self._opti.set_initial(Xk, self.x_guess[0])
+        X.append(Xk)
+
+        for k in range(self.nodes):
+            # Control variable
+            Uk = self._opti.variable(self.u.shape[0])
+            U.append(Uk)
+
+            if k == 0:
+                u_lb, u_ub = self.u_0_lb, self.u_0_ub
+            elif k == self.nodes - 1:
+                u_lb, u_ub = self.u_f_lb, self.u_f_ub
+            else:
+                u_lb, u_ub = self.u_lb, self.u_ub
+
+            self._opti.subject_to(self._opti.bounded(u_lb, Uk, u_ub))
+            self._opti.set_initial(Uk, self.u_guess)
+
+            # Collocation points within this interval
+            Xc = []
+            for j in range(self.polydeg):
+                Xkj = self._opti.variable(nstates)
+                Xc.append(Xkj)
+                self._opti.subject_to(
+                    self._opti.bounded(self.x_lb, Xkj, self.x_ub)
+                )
+                self._opti.set_initial(Xkj, self.x_guess[k])
+
+            # Collocation equations and quadrature
+            Xk_end = D[0] * Xk
+            for j in range(1, self.polydeg + 1):
+                xpc = C[0, j] * Xk
+                for r in range(self.polydeg):
+                    xpc = xpc + C[r + 1, j] * Xc[r]
+
+                fj, qj = self.func_dynamics(Xc[j - 1], Uk)
+                self._opti.subject_to(self.dt * fj == xpc)
+
+                Xk_end = Xk_end + D[j] * Xc[j - 1]
+                J = J + B[j] * qj
+
+            # State at end of interval
+            Xk = self._opti.variable(nstates)
+            X.append(Xk)
+
+            if k < self.nodes - 1:
+                x_lb, x_ub = self.x_lb, self.x_ub
+            else:
+                x_lb, x_ub = self.x_f_lb, self.x_f_ub
+
+            self._opti.subject_to(self._opti.bounded(x_lb, Xk, x_ub))
+            self._opti.set_initial(Xk, self.x_guess[k])
+
+            # Continuity constraint
+            self._opti.subject_to(Xk_end == Xk)
+
+        self._opti.minimize(J)
+
+        return X, U
+
+    def _solve(self, X, U, **kwargs):
+        """Solve the Opti NLP and extract trajectory DataFrame.
+
+        Args:
+            X: List of state MX variables from _build_opti.
+            U: List of control MX variables from _build_opti.
+            **kwargs: Passed through to to_trajectory().
+
+        Returns:
+            pd.DataFrame: Trajectory DataFrame.
+        """
+        self._opti.solver("ipopt", self.solver_options)
+
+        try:
+            sol = self._opti.solve()
+        except RuntimeError:
+            sol = self._opti.debug
+
+        # Backward compatibility: self.solver.stats() and self.solution["f"]
+        self.solver = self._SolverCompat(sol.stats())
+        self.solution = {"f": float(sol.value(self._opti.f))}
+
+        ts_final_val = float(sol.value(self.ts_final))
+        x_opt = sol.value(ca.horzcat(*X))
+        u_opt = sol.value(ca.horzcat(*U))
+
+        return self.to_trajectory(ts_final_val, x_opt, u_opt, **kwargs)
 
     def _calc_emission(self, x, u, symbolic=True):
         xp, yp, h, m = x[0], x[1], x[2], x[3]
