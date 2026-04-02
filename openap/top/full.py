@@ -2,11 +2,12 @@ import warnings
 from math import pi
 
 import casadi as ca
+import openap.casadi as oc
+from openap.aero import fpm, ft, kts
+
 import numpy as np
 import openap
-import openap.casadi as oc
 import pandas as pd
-from openap.aero import fpm, ft, kts
 
 from .base import Base
 from .climb import Climb
@@ -172,9 +173,7 @@ class CompleteFlight(Base):
 
         # ts and dt consistency
         for k in range(self.nodes - 1):
-            opti.subject_to(
-                opti.bounded(-1, X[k + 1][4] - X[k][4] - self.dt, 1)
-            )
+            opti.subject_to(opti.bounded(-1, X[k + 1][4] - X[k][4] - self.dt, 1))
 
         # Smooth Mach number change
         for k in range(self.nodes - 1):
@@ -182,16 +181,12 @@ class CompleteFlight(Base):
 
         # Smooth vertical rate change
         for k in range(self.nodes - 1):
-            opti.subject_to(
-                opti.bounded(-500 * fpm, U[k + 1][1] - U[k][1], 500 * fpm)
-            )
+            opti.subject_to(opti.bounded(-500 * fpm, U[k + 1][1] - U[k][1], 500 * fpm))
 
         # Smooth heading change
         for k in range(self.nodes - 1):
             opti.subject_to(
-                opti.bounded(
-                    -15 * pi / 180, U[k + 1][2] - U[k][2], 15 * pi / 180
-                )
+                opti.bounded(-15 * pi / 180, U[k + 1][2] - U[k][2], 15 * pi / 180)
             )
 
         # Fuel constraint
@@ -208,9 +203,7 @@ class CompleteFlight(Base):
             warnings.warn("flight might be infeasible.")
 
         if df.altitude.max() < 5000:
-            warnings.warn(
-                "max altitude < 5000 ft, optimization seems to have failed."
-            )
+            warnings.warn("max altitude < 5000 ft, optimization seems to have failed.")
             df = None
 
         if df is not None:

@@ -260,8 +260,6 @@ class Base:
         max_iteration = kwargs.get("max_iteration", kwargs.get("max_iterations", 3000))
         tol = kwargs.get("tol", 1e-6)
         acceptable_tol = kwargs.get("acceptable_tol", 1e-4)
-        alpha_for_y = kwargs.get("alpha_for_y", "primal-and-full")
-        hessian_approximation = kwargs.get("hessian_approximation", "exact")
 
         self.debug = debug
 
@@ -285,8 +283,6 @@ class Base:
             "ipopt.tol": tol,
             "ipopt.acceptable_tol": acceptable_tol,
             "ipopt.mu_strategy": "adaptive",
-            "ipopt.alpha_for_y": alpha_for_y,
-            "ipopt.hessian_approximation": hessian_approximation,
         }
 
         for key, value in ipopt_kwargs.items():
@@ -331,15 +327,6 @@ class Base:
             {"allow_free": True},
         )
 
-    class _SolverCompat:
-        """Wrapper to maintain backward compatibility with ca.nlpsol interface."""
-
-        def __init__(self, stats_dict):
-            self._stats = stats_dict
-
-        def stats(self):
-            return self._stats
-
     def _build_opti(self, objective, ts_final_guess, **kwargs):
         """Build CasADi Opti problem with direct collocation structure.
 
@@ -377,9 +364,7 @@ class Base:
 
         # Initial state
         Xk = self._opti.variable(nstates)
-        self._opti.subject_to(
-            self._opti.bounded(self.x_0_lb, Xk, self.x_0_ub)
-        )
+        self._opti.subject_to(self._opti.bounded(self.x_0_lb, Xk, self.x_0_ub))
         self._opti.set_initial(Xk, self.x_guess[0])
         X.append(Xk)
 
@@ -403,9 +388,7 @@ class Base:
             for j in range(self.polydeg):
                 Xkj = self._opti.variable(nstates)
                 Xc.append(Xkj)
-                self._opti.subject_to(
-                    self._opti.bounded(self.x_lb, Xkj, self.x_ub)
-                )
+                self._opti.subject_to(self._opti.bounded(self.x_lb, Xkj, self.x_ub))
                 self._opti.set_initial(Xkj, self.x_guess[k])
 
             # Collocation equations and quadrature
@@ -460,9 +443,8 @@ class Base:
                 warnings.warn(f"Solver failed: {e}")
             sol = self._opti.debug
 
-        # Backward compatibility: self.solver.stats() and self.solution["f"]
-        self.solver = self._SolverCompat(sol.stats())
-        self.solution = {"f": float(sol.value(self._opti.f))}
+        self.solver = sol
+        self.objective_value = float(sol.value(self._opti.f))
 
         ts_final_val = float(sol.value(self.ts_final))
         x_opt = sol.value(ca.horzcat(*X))

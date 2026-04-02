@@ -148,7 +148,7 @@ def run_opt(OptimizerClass, origin, dest, scaling_method, objective="fuel",
     elapsed = time.time() - t0
 
     stats = optimizer.solver.stats()
-    obj_val = float(optimizer.solution["f"])
+    obj_val = optimizer.objective_value
     return df, elapsed, stats, obj_val
 
 

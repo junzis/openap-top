@@ -134,15 +134,6 @@ def construct_interpolant(
         )
 
 
-def interp_grid(
-    longitude, latitude, height, grid_value, timestamp=None, shape="linear"
-):
-    raise NotImplementedError(
-        "Function interp_grid() is deprecated, "
-        "use interpolant_from_dataframe() instead."
-    )
-
-
 def interpolant_from_dataframe(
     df: pd.DataFrame, shape: str = "linear"
 ) -> ca.interpolant:
