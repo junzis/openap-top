@@ -99,30 +99,20 @@ class Base:
         lat0 = (self.lat1 + self.lat2) / 2
         lon0 = (self.lon1 + self.lon2) / 2
 
-        if not inverse:
-            if symbolic:
-                bearings = oc.geo.bearing(lat0, lon0, lat, lon) / 180 * 3.14159
-                distances = oc.geo.distance(lat0, lon0, lat, lon)
-                x = distances * ca.sin(bearings)
-                y = distances * ca.cos(bearings)
-            else:
-                bearings = openap.aero.bearing(lat0, lon0, lat, lon) / 180 * 3.14159
-                distances = openap.aero.distance(lat0, lon0, lat, lon)
-                x = distances * np.sin(bearings)
-                y = distances * np.cos(bearings)
+        if symbolic:
+            geo, trig = oc.geo, ca
+        else:
+            geo, trig = openap.aero, np
 
-            return x, y
+        if not inverse:
+            bearings = geo.bearing(lat0, lon0, lat, lon) / 180 * 3.14159
+            distances = geo.distance(lat0, lon0, lat, lon)
+            return distances * trig.sin(bearings), distances * trig.cos(bearings)
         else:
             x, y = lon, lat
-            if symbolic:
-                distances = ca.sqrt(x**2 + y**2)
-                bearing = ca.arctan2(x, y) * 180 / 3.14159
-                lat, lon = oc.geo.latlon(lat0, lon0, distances, bearing)
-            else:
-                distances = np.sqrt(x**2 + y**2)
-                bearing = np.arctan2(x, y) * 180 / 3.14159
-                lat, lon = openap.aero.latlon(lat0, lon0, distances, bearing)
-
+            distances = trig.sqrt(x**2 + y**2)
+            bearing = trig.arctan2(x, y) * 180 / 3.14159
+            lat, lon = geo.latlon(lat0, lon0, distances, bearing)
             return lon, lat
 
     def initial_guess(self, flight: pd.DataFrame = None):
