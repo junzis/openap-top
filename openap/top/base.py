@@ -228,8 +228,11 @@ class Base:
         nodes: int | None = None,
         polydeg: int = 3,
         debug=False,
+        max_nodes: int = 120,
+        max_iter: int = 3000,
+        tol: float = 1e-6,
+        acceptable_tol: float = 1e-4,
         ipopt_kwargs=None,
-        **kwargs,
     ):
         if ipopt_kwargs is None:
             ipopt_kwargs = {}
@@ -238,16 +241,10 @@ class Base:
         else:
             self.nodes = int(self.range / 50_000)  # node every 50km
 
-        max_nodes = kwargs.get("max_nodes", 120)
-
         self.nodes = max(20, self.nodes)
         self.nodes = min(max_nodes, self.nodes)
 
         self.polydeg = polydeg
-
-        max_iteration = kwargs.get("max_iteration", kwargs.get("max_iterations", 3000))
-        tol = kwargs.get("tol", 1e-6)
-        acceptable_tol = kwargs.get("acceptable_tol", 1e-4)
 
         self.debug = debug
 
@@ -266,7 +263,7 @@ class Base:
             "calc_lam_p": False,
             "ipopt.print_level": ipopt_print,
             "ipopt.sb": "yes",
-            "ipopt.max_iter": max_iteration,
+            "ipopt.max_iter": max_iter,
             "ipopt.fixed_variable_treatment": "relax_bounds",
             "ipopt.tol": tol,
             "ipopt.acceptable_tol": acceptable_tol,

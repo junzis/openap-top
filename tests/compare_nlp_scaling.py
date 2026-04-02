@@ -126,7 +126,7 @@ def run_opt(OptimizerClass, origin, dest, scaling_method, objective="fuel",
         "ipopt_kwargs": {"nlp_scaling_method": scaling_method},
     }
     if df_cost is not None:
-        setup_kwargs["max_iterations"] = 2000
+        setup_kwargs["max_iter"] = 2000
     optimizer.setup(**setup_kwargs)
 
     traj_kwargs = {}
