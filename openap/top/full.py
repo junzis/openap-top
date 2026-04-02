@@ -21,26 +21,7 @@ except Exception:
 
 
 class CompleteFlight(Base):
-    """
-    A class to represent a complete flight trajectory optimization.
-
-    Methods
-    -------
-    __init__(*args, **kwargs)
-        Initializes the CompleteFlight object with given arguments.
-
-    init_conditions()
-        Initializes the direct collocation bounds and guesses for the optimization problem.
-
-    trajectory(objective="fuel", return_failed=False, **kwargs) -> pd.DataFrame
-        Calculates the complete global optimal trajectory based on the given objective.
-        Parameters:
-            objective (str): The objective of the optimization, default is "fuel".
-            return_failed (bool): If True, returns the failed trajectory if optimization fails.
-            **kwargs: Additional keyword arguments for the optimization model.
-        Returns:
-            pd.DataFrame: The optimized trajectory as a pandas DataFrame.
-    """
+    """Complete flight (takeoff to landing) trajectory optimizer."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -96,19 +77,17 @@ class CompleteFlight(Base):
         self.u_guess = [0.6, 1000 * fpm, psi]
 
     def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
-        """
-        Computes the optimal trajectory for the aircraft based on the given objective.
+        """Compute the optimal complete flight trajectory.
 
-        Parameters:
-        - objective (str): The objective of the optimization, default is "fuel".
-        - **kwargs: Additional keyword arguments.
-            - max_fuel (float): Customized maximum fuel constraint.
-            - initial_guess (pd.DataFrame): Initial guess for the trajectory.
-            - return_failed (bool): If True, returns the DataFrame even if the
-                optimization fails. Default is False.
+        Args:
+            objective: Optimization objective. Default "fuel".
+            **kwargs:
+                max_fuel: Maximum fuel constraint (kg).
+                initial_guess: DataFrame to use as initial guess.
+                return_failed: Return result even if optimization fails.
 
         Returns:
-        - pd.DataFrame: A DataFrame containing the optimized trajectory.
+            pd.DataFrame: Optimized trajectory.
         """
         self.init_conditions(**kwargs)
 
@@ -222,6 +201,8 @@ class CompleteFlight(Base):
 
 
 class MultiPhase(Base):
+    """Multi-phase (climb + cruise + descent) trajectory optimizer."""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.cruise = Cruise(*args, **kwargs)
@@ -229,6 +210,11 @@ class MultiPhase(Base):
         self.descent = Descent(*args, **kwargs)
 
     def enable_wind(self, windfield: pd.DataFrame):
+        """Enable wind for all phases.
+
+        Args:
+            windfield: DataFrame with wind data.
+        """
         w = tools.PolyWind(
             windfield, self.proj, self.lat1, self.lon1, self.lat2, self.lon2
         )
@@ -237,31 +223,18 @@ class MultiPhase(Base):
         self.descent.wind = w
 
     def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
-        """
-        Calculate the optimal trajectory including climb, cruise, and descent phases.
+        """Compute the optimal multi-phase trajectory.
 
-        Parameters:
-        objective (str or tuple): The optimization objective for the trajectory.
-            It can be a string or a tuple of strings specifying the objective for
-            climb, cruise, and descent respectively. Default is "fuel".
-        **kwargs: Additional keyword arguments.
+        Solves climb, cruise, and descent sequentially, then
+        concatenates the results.
+
+        Args:
+            objective: Single objective (str) or per-phase tuple
+                (climb_obj, cruise_obj, descent_obj). Default "fuel".
+            **kwargs: Passed to each phase optimizer.
 
         Returns:
-        pd.DataFrame: A DataFrame containing the combined trajectory data.
-
-        The DataFrame includes columns for mass, latitude, longitude, true airspeed,
-            and timestamp (ts) among others.
-
-        The method performs the following steps:
-        1. Calculate the preliminary optimal cruise trajectory parameters.
-        2. Calculate the optimal climb trajectory.
-        3. Update the cruise parameters based on the climb results and recalculate the cruise trajectory.
-        4. Calculate the optimal descent trajectory.
-        5. Determine the top of descent (TOD) point.
-        6. Adjust the timestamps for the cruise and descent phases.
-        7. Concatenate the climb, cruise, and descent data into a single DataFrame.
-
-        If the `debug` attribute is set to True, debug information will be printed.
+            pd.DataFrame: Combined trajectory.
         """
         if isinstance(objective, str):
             obj_cl = obj_cr = obj_de = objective

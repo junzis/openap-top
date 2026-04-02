@@ -96,6 +96,20 @@ class Base:
         self.setup()
 
     def proj(self, lon, lat, inverse=False, symbolic=False):
+        """Project between lon/lat and local cartesian coordinates.
+
+        Uses azimuthal equidistant projection centered between origin
+        and destination.
+
+        Args:
+            lon: Longitude (forward) or x coordinate (inverse).
+            lat: Latitude (forward) or y coordinate (inverse).
+            inverse: If True, convert (x, y) back to (lon, lat).
+            symbolic: If True, use CasADi symbolic math.
+
+        Returns:
+            tuple: (x, y) in meters, or (lon, lat) if inverse.
+        """
         lat0 = (self.lat1 + self.lat2) / 2
         lon0 = (self.lon1 + self.lon2) / 2
 
@@ -116,6 +130,16 @@ class Base:
             return lon, lat
 
     def initial_guess(self, flight: pd.DataFrame = None):
+        """Generate initial guess for the optimizer.
+
+        Args:
+            flight: Existing trajectory to use as initial guess.
+                If None, uses straight-line interpolation at cruise altitude.
+
+        Returns:
+            np.ndarray: Array of shape (nodes+1, 5) with columns
+                [xp, yp, h, mass, ts].
+        """
         m_guess = self.mass_init * np.ones(self.nodes + 1)
         ts_guess = np.linspace(0, 6 * 3600, self.nodes + 1)
 
@@ -142,11 +166,22 @@ class Base:
         return np.vstack([xp_guess, yp_guess, h_guess, m_guess, ts_guess]).T
 
     def enable_wind(self, windfield: pd.DataFrame):
+        """Enable wind field integration using polynomial regression model.
+
+        Args:
+            windfield: DataFrame with columns [longitude, latitude, h, ts, u, v].
+        """
         self.wind = tools.PolyWind(
             windfield, self.proj, self.lat1, self.lon1, self.lat2, self.lon2
         )
 
     def collocation_coeff(self):
+        """Compute Legendre collocation coefficients.
+
+        Returns:
+            tuple: (C, D, B) where C is the derivative matrix,
+                D is the continuity vector, B is the quadrature vector.
+        """
         # Get collocation points using Legendre polynomials
         tau_root = np.append(0, ca.collocation_points(self.polydeg, "legendre"))
 
@@ -182,14 +217,14 @@ class Base:
         return C, D, B
 
     def xdot(self, x, u) -> ca.MX:
-        """Ordinary differential equation for cruising
+        """State derivatives for the equations of motion.
 
         Args:
-            x (ca.MX): States [x position (m), y position (m), height (m), mass (kg)]
-            u (ca.MX): Controls [mach number, vertical speed (m/s), heading (rad)]
+            x: State vector [xp (m), yp (m), h (m), mass (kg), ts (s)].
+            u: Control vector [mach, vs (m/s), heading (rad)].
 
         Returns:
-            ca.MX: State direvatives
+            ca.MX: State derivatives [dx, dy, dh, dm, dt].
         """
         xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
         mach, vs, psi = u[0], u[1], u[2]
@@ -278,6 +313,15 @@ class Base:
             self.solver_options[f"ipopt.{key}"] = value
 
     def init_model(self, objective, **kwargs):
+        """Build the symbolic dynamics function for the given objective.
+
+        Creates self.x (states), self.u (controls), and self.func_dynamics.
+        Must be called after self.ts_final and self.dt are set.
+
+        Args:
+            objective: Objective name (str), "ci:N" format, or callable(x, u, dt).
+            **kwargs: Passed to the objective function.
+        """
         # Model variables
         xp = ca.MX.sym("xp")
         yp = ca.MX.sym("yp")
@@ -447,6 +491,11 @@ class Base:
         return self.to_trajectory(ts_final_val, x_opt, u_opt, **kwargs)
 
     def _calc_emission(self, x, u, symbolic=True):
+        """Compute emission species from state and control vectors.
+
+        Returns:
+            tuple: (co2, h2o, sox, soot, nox) emission rates.
+        """
         xp, yp, h, m = x[0], x[1], x[2], x[3]
         mach, vs, psi = u[0], u[1], u[2]
 
@@ -473,6 +522,7 @@ class Base:
         return co2, h2o, sox, soot, nox
 
     def obj_fuel(self, x, u, dt, symbolic=True, **kwargs):
+        """Fuel burn objective: fuelflow * dt."""
         xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
         mach, vs, psi = u[0], u[1], u[2]
 
@@ -492,22 +542,16 @@ class Base:
         return ff * dt
 
     def obj_time(self, x, u, dt, **kwargs):
+        """Minimum time objective."""
         return dt
 
     def obj_ci(self, x, u, dt, ci, time_price=25, fuel_price=0.8, **kwargs):
-        """
-        Calculate the objective cost index (CI) based on time and fuel costs.
+        """Cost index objective blending time and fuel costs.
 
-        Parameters:
-        x (ca.MX): state vector.
-        u (ca.MX): control vector.
-        dt (ca.MX): time step.
-        ci (float): Cost index, a percentage value between 0 and 100.
-        time_price (float): optional, cost of time per minute (default is 25 EUR/min).
-        fuel_price (float): optional, cost of fuel per liter (default is 0.8 EUR/L).
-
-        Returns:
-        ca.MX: cost index objective.
+        Args:
+            ci: Cost index (0-100). 0 = fuel only, 100 = time only.
+            time_price: Cost of time in EUR/min. Default 25.
+            fuel_price: Cost of fuel in EUR/L. Default 0.8.
         """
 
         fuel = self.obj_fuel(x, u, dt, **kwargs)
@@ -533,32 +577,21 @@ class Base:
     }
 
     def _obj_climate(self, x, u, dt, metric, **kwargs):
+        """Climate impact objective using GWP/GTP metric coefficients."""
         co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
         c_h2o, c_nox, c_sox, c_soot = self._CLIMATE_COEFF[metric]
         cost = co2 + c_h2o * h2o + c_nox * nox + c_sox * sox + c_soot * soot
         return cost * dt
 
     def obj_grid_cost(self, x, u, dt, **kwargs):
-        """
-        Calculate the cost of the grid object.
+        """Grid-based cost objective using a CasADi interpolant.
 
-        Parameters:
-        x (ca.MX): State vector [xp, yp, h, m, ts].
-        u (ca.MX): Control vector [mach, vs, psi].
-        dt (ca.MX): Time step.
-
-        **kwargs (dict): Additional keyword arguments.
-            - interpolant (function): Interpolant function.
-            - symbolic (bool): Flag indicating whether to use symbolic computation.
-            - n_dim (int): Dimension of the input data (3 or 4), default to 3.
-            - time_dependent (bool): Flag indicating whether the cost is time dependent.
-            The cost will be multiplied by dt if true.
-
-        Returns:
-        cost (ca.MX): cost objective.
-
-        Raises:
-        AssertionError: If n_dim is not 3 or 4.
+        Args:
+            **kwargs:
+                interpolant: CasADi interpolant function.
+                symbolic: Use symbolic computation. Default True.
+                n_dim: Input dimension, 3 (lon,lat,h) or 4 (+ts). Default 3.
+                time_dependent: Multiply cost by dt. Default True.
         """
 
         xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]

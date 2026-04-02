@@ -12,21 +12,16 @@ from openap import aero
 
 
 def read_grids(paths: str | list[str], engine=None) -> pd.DataFrame:
-    """
-    Parameters:
-    paths (str or list of str): The paths can be a single path or a list of paths.
-        You must ensure the file with the lowest `time` value corresponds to the
-        take-off time of your flight.
-    engine (str, optional): The engine to use for reading the grib files.
-        Defaults to None. Options are 'cfgrib' and 'netcdf4', etc.
+    """Read meteorological grid data from GRIB/NetCDF files.
+
+    Args:
+        paths: File path(s). The file with the lowest time value
+            should correspond to take-off time.
+        engine: File reader engine ('cfgrib', 'netcdf4', etc.).
 
     Returns:
-    pd.DataFrame: A pandas DataFrame containing the data from the grib files.
-
-    The DataFrame includes the following transformations:
-    - Adjusts the 'longitude' column to be within the range [-180, 180].
-    - Adds a column 'h' calculated using the 'isobaricInhPa' column.
-    - Adds a column 'ts' representing the total seconds from the minimum time.
+        pd.DataFrame: Grid data with longitude adjusted to [-180, 180],
+            height column 'h' (meters), and 'ts' (seconds from start).
     """
     df = (
         xr.open_mfdataset(paths, engine=engine)
@@ -95,6 +90,7 @@ class PolyWind:
         self.coef_u, self.coef_v = model["ridge"].coef_
 
     def calc_u(self, x, y, h, ts):
+        """Compute eastward wind component (m/s) at given position."""
         u = sum(
             [
                 eval(f, {}, {"x": x, "y": y, "h": h, "ts": ts}) * c
@@ -104,6 +100,7 @@ class PolyWind:
         return u
 
     def calc_v(self, x, y, h, ts):
+        """Compute northward wind component (m/s) at given position."""
         v = sum(
             [
                 eval(f, {}, {"x": x, "y": y, "h": h, "ts": ts}) * c
@@ -121,22 +118,18 @@ def construct_interpolant(
     timestamp: Optional[np.array] = None,
     shape: str = "linear",
 ):
-    """
-    This function is used to create the 3d or 4d grid based cost function.
+    """Construct a CasADi interpolant for 3D or 4D grid cost.
 
-    It interpolates grid values based on the given longitude, latitude, height,
-        timestamp, and grid_value arrays.
-
-    Parameters:
-        longitude (np.array): Array of longitudes.
-        latitude (np.array): Array of latitudes.
-        height (np.array): Array of heights (in meters).
-        grid_value (np.array): Array of grid values.
-        timestamp (Optional[np.array], optional): Array of timestamps. Defaults to None.
-        shape (str, optional): Interpolation shape. Defaults to "linear".
+    Args:
+        longitude: Sorted unique longitude values.
+        latitude: Sorted unique latitude values.
+        height: Sorted unique height values (meters).
+        grid_value: Flattened grid values.
+        timestamp: Sorted unique timestamps. If provided, creates 4D grid.
+        shape: Interpolation type, "linear" or "bspline".
 
     Returns:
-        ca.interpolant: Casadi interpolant object representing the grid values.
+        ca.interpolant: CasADi interpolant object.
     """
 
     assert shape in ["linear", "bspline"]
@@ -160,21 +153,17 @@ def construct_interpolant(
 def interpolant_from_dataframe(
     df: pd.DataFrame, shape: str = "linear"
 ) -> ca.interpolant:
-    """
-    This function is used to create the 3d or 4d grid based cost function.
+    """Construct a CasADi interpolant from a DataFrame.
 
-    It interpolates grid values based on the given DataFrame. The DataFrame must
-    contain columns 'longitude', 'latitude', 'height' (meters), and 'cost'.
+    DataFrame must have columns: longitude, latitude, height (m), cost.
+    If a 'ts' column is present, creates a 4D (time-dependent) grid.
 
-    If the DataFrame contains a 'ts' column, it will be used as the timestamp,
-    and the grid will be treated as 4d.
-
-    Parameters:
-        df (pd.DataFrame): DataFrame containing the grid values.
-        shape (str, optional): Interpolation shape. Defaults to "linear".
+    Args:
+        df: Grid data with required columns.
+        shape: Interpolation type, "linear" or "bspline".
 
     Returns:
-        ca.interpolant: Casadi interpolant object representing the grid values.
+        ca.interpolant: CasADi interpolant object.
     """
 
     assert shape in ["linear", "bspline"], "Shape must be 'linear' or 'bspline'"

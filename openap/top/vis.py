@@ -12,6 +12,17 @@ warnings.filterwarnings("ignore")
 
 
 def map(df, windfield=None, ax=None, barb_steps=10):
+    """Plot trajectory on a map with optional wind barbs.
+
+    Args:
+        df: Trajectory DataFrame with latitude/longitude columns.
+        windfield: Wind data DataFrame. If provided, draws wind barbs.
+        ax: Matplotlib axes with cartopy projection. Created if None.
+        barb_steps: Step interval for wind barb subsampling.
+
+    Returns:
+        matplotlib.pyplot module.
+    """
     lat1, lon1 = df.latitude.iloc[0], df.longitude.iloc[0]
     lat2, lon2 = df.latitude.iloc[-1], df.longitude.iloc[-1]
 
@@ -88,6 +99,16 @@ def map(df, windfield=None, ax=None, barb_steps=10):
 
 
 def trajectory(df, windfield=None, barb_steps=10):
+    """Plot trajectory profiles (altitude, TAS, VS) alongside a map.
+
+    Args:
+        df: Trajectory DataFrame.
+        windfield: Wind data DataFrame for map wind barbs.
+        barb_steps: Step interval for wind barb subsampling.
+
+    Returns:
+        matplotlib.pyplot module.
+    """
     fig = plt.figure(figsize=(12, 5))
 
     gs = GridSpec(3, 2)

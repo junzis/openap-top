@@ -12,6 +12,8 @@ from .cruise import Cruise
 
 
 class Climb(Base):
+    """Climb phase trajectory optimizer."""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.cruise = Cruise(*args, **kwargs)
@@ -91,7 +93,19 @@ class Climb(Base):
         self.u_guess = [0.2, 1500 * fpm, od_psi]
 
     def trajectory(self, objective="fuel", df_cruise=None, **kwargs) -> pd.DataFrame:
+        """Compute the optimal climb trajectory.
 
+        Args:
+            objective: Optimization objective. Default "fuel".
+            df_cruise: Cruise trajectory for target altitude/mach.
+                If None, computed automatically.
+            **kwargs:
+                alt_stop: Top of climb altitude in feet.
+                remove_cruise: Remove level-off points. Default True.
+
+        Returns:
+            pd.DataFrame: Optimized climb trajectory.
+        """
         alt_stop = kwargs.get("alt_stop", None)
 
         if df_cruise is None:

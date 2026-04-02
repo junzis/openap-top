@@ -11,6 +11,8 @@ from .base import Base
 
 
 class Cruise(Base):
+    """Cruise phase trajectory optimizer."""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -20,15 +22,19 @@ class Cruise(Base):
         self.allow_descent = False
 
     def fix_mach_number(self):
+        """Constrain Mach number to be constant during cruise."""
         self.fix_mach = True
 
     def fix_cruise_altitude(self):
+        """Constrain altitude to be constant (no climb/descent)."""
         self.fix_alt = True
 
     def fix_track_angle(self):
+        """Constrain heading to be constant (great circle track)."""
         self.fix_track = True
 
     def allow_cruise_descent(self):
+        """Allow descending during cruise (step descent)."""
         self.allow_descent = True
 
     def init_conditions(self, **kwargs):
@@ -82,19 +88,17 @@ class Cruise(Base):
         self.u_guess = [0.7, 0, psi]
 
     def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
-        """
-        Computes the optimal trajectory for the aircraft based on the given objective.
+        """Compute the optimal cruise trajectory.
 
-        Parameters:
-        - objective (str): The objective of the optimization, default is "fuel".
-        - **kwargs: Additional keyword arguments.
-            - max_fuel (float): Customized maximum fuel constraint.
-            - initial_guess (pd.DataFrame): Initial guess for the trajectory.
-            - return_failed (bool): If True, returns the DataFrame even if the
-                optimization fails. Default is False.
+        Args:
+            objective: Optimization objective. Default "fuel".
+            **kwargs:
+                max_fuel: Maximum fuel constraint (kg).
+                initial_guess: DataFrame to use as initial guess.
+                return_failed: Return result even if optimization fails.
 
         Returns:
-        - pd.DataFrame: A DataFrame containing the optimized trajectory.
+            pd.DataFrame: Optimized trajectory.
         """
         self.init_conditions(**kwargs)
 
