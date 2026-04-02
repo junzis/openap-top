@@ -64,17 +64,24 @@ class Base:
         force_engine = engine is not None
 
         self.thrust = oc.Thrust(
-            actype, self.engtype, use_synonym=self.use_synonym,
+            actype,
+            self.engtype,
+            use_synonym=self.use_synonym,
             force_engine=force_engine,
         )
         self.wrap = openap.WRAP(actype, use_synonym=self.use_synonym)
         self.drag = oc.Drag(actype, wave_drag=True, use_synonym=self.use_synonym)
         self.fuelflow = oc.FuelFlow(
-            actype, self.engtype, wave_drag=True, use_synonym=self.use_synonym,
+            actype,
+            self.engtype,
+            wave_drag=True,
+            use_synonym=self.use_synonym,
             force_engine=force_engine,
         )
         self.emission = oc.Emission(
-            actype, self.engtype, use_synonym=self.use_synonym,
+            actype,
+            self.engtype,
+            use_synonym=self.use_synonym,
         )
 
         # from pyproj import Proj

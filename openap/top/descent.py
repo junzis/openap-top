@@ -42,7 +42,6 @@ class Descent(Base):
         mass_tod = df_cruise.mass.iloc[0]
         cruise_mach = df_cruise.mach.max()
 
-
         if alt_start is not None:
             h_start = alt_start * ft
             if h_start > df_cruise.h.iloc[0]:
@@ -113,9 +112,7 @@ class Descent(Base):
 
         # Constrain time and dt
         for k in range(1, self.nodes):
-            opti.subject_to(
-                opti.bounded(-1, X[k][4] - X[k - 1][4] - self.dt, 1)
-            )
+            opti.subject_to(opti.bounded(-1, X[k][4] - X[k - 1][4] - self.dt, 1))
 
         # Smooth Mach number changes
         for k in range(1, self.nodes):
@@ -130,9 +127,7 @@ class Descent(Base):
         # Smooth heading changes
         for k in range(1, self.nodes):
             opti.subject_to(
-                opti.bounded(
-                    -5 * pi / 180, U[k][2] - U[k - 1][2], 5 * pi / 180
-                )
+                opti.bounded(-5 * pi / 180, U[k][2] - U[k - 1][2], 5 * pi / 180)
             )
 
         # Force and energy constraints

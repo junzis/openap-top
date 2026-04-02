@@ -124,28 +124,21 @@ class Climb(Base):
             thrust_max = self.thrust.climb(0, hk / ft, 0, dT=self.dT)
             drag = self.drag.clean(X[k][3], vk / kts, hk / ft, dT=self.dT)
             opti.subject_to(
-                (thrust_max - drag) / X[k][3] - oc.aero.g0 / vk * dhdt - dvdt
-                >= 0
+                (thrust_max - drag) / X[k][3] - oc.aero.g0 / vk * dhdt - dvdt >= 0
             )
 
         # Constrain time and dt
         for k in range(1, self.nodes):
-            opti.subject_to(
-                opti.bounded(-1, X[k][4] - X[k - 1][4] - self.dt, 1)
-            )
+            opti.subject_to(opti.bounded(-1, X[k][4] - X[k - 1][4] - self.dt, 1))
 
         # Smooth vertical rate changes
         for k in range(1, self.nodes):
-            opti.subject_to(
-                opti.bounded(-500 * fpm, U[k][1] - U[k - 1][1], 500 * fpm)
-            )
+            opti.subject_to(opti.bounded(-500 * fpm, U[k][1] - U[k - 1][1], 500 * fpm))
 
         # Smooth heading changes
         for k in range(1, self.nodes - 1):
             opti.subject_to(
-                opti.bounded(
-                    -5 * pi / 180, U[k][2] - U[k - 1][2], 5 * pi / 180
-                )
+                opti.bounded(-5 * pi / 180, U[k][2] - U[k - 1][2], 5 * pi / 180)
             )
 
         # Final position should be along the cruise trajectory
@@ -153,15 +146,12 @@ class Climb(Base):
             xp_1, yp_1 = df_cruise.x.iloc[0], df_cruise.y.iloc[0]
             xp_2, yp_2 = df_cruise.x.iloc[1], df_cruise.y.iloc[1]
             opti.subject_to(
-                (yp_2 - yp_1) / (xp_2 - xp_1)
-                == (X[-1][1] - yp_1) / (X[-1][0] - xp_1)
+                (yp_2 - yp_1) / (xp_2 - xp_1) == (X[-1][1] - yp_1) / (X[-1][0] - xp_1)
             )
 
         # Fixed range
         xp_0, yp_0 = self.proj(self.lon1, self.lat1)
-        climb_range = ca.sqrt(
-            (X[-1][0] - xp_0) ** 2 + (X[-1][1] - yp_0) ** 2
-        )
+        climb_range = ca.sqrt((X[-1][0] - xp_0) ** 2 + (X[-1][1] - yp_0) ** 2)
         opti.subject_to(climb_range == self.traj_range)
 
         # --- Solve ---
