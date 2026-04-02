@@ -103,189 +103,69 @@ class Climb(Base):
             print("Calculating optimal climbing trajectory...")
 
         self.init_conditions(df_cruise, alt_stop=alt_stop)
-        self.init_model(objective, **kwargs)
 
-        C, D, B = self.collocation_coeff()
+        X, U = self._build_opti(objective, ts_final_guess=3600, **kwargs)
+        opti = self._opti
 
-        # Start with an empty NLP
-        w = []  # Containing all the states & controls generated
-        w0 = []  # Containing the initial guess for w
-        lbw = []  # Lower bound constraints on the w variable
-        ubw = []  # Upper bound constraints on the w variable
-        J = 0  # Objective function
-        g = []  # Constraint function
-        lbg = []  # Constraint lb value
-        ubg = []  # Constraint ub value
+        # --- Phase-specific constraints ---
 
-        # For plotting x and u given w
-        X = []
-        U = []
-
-        # Apply initial conditions
-        # Create Xk such that it is the same length as x
-        nstates = self.x.shape[0]
-        Xk = ca.MX.sym("X0", nstates, self.x.shape[1])
-        w.append(Xk)
-        lbw.append(self.x_0_lb)
-        ubw.append(self.x_0_ub)
-        w0.append(self.x_guess[0])
-        X.append(Xk)
-
-        # Formulate the NLP
-        for k in range(self.nodes):
-            # New NLP variable for the control
-            Uk = ca.MX.sym("U_" + str(k), self.u.shape[0])
-            U.append(Uk)
-            w.append(Uk)
-            if k == 0:
-                lbw.append(self.u_0_lb)
-                ubw.append(self.u_0_ub)
-                w0.append(self.u_guess)
-            elif k == self.nodes - 1:
-                lbw.append(self.u_f_lb)
-                ubw.append(self.u_f_ub)
-                w0.append(self.u_guess)
-            else:
-                lbw.append(self.u_lb)
-                ubw.append(self.u_ub)
-                w0.append(self.u_guess)
-
-            # State at collocation points
-            Xc = []
-            for j in range(self.polydeg):
-                Xkj = ca.MX.sym("X_" + str(k) + "_" + str(j), nstates)
-                Xc.append(Xkj)
-                w.append(Xkj)
-                lbw.append(self.x_lb)
-                ubw.append(self.x_ub)
-                w0.append(self.x_guess[k])
-
-            # Loop over collocation points
-            Xk_end = D[0] * Xk
-            for j in range(1, self.polydeg + 1):
-                # Expression for the state derivative at the collocation point
-                xpc = C[0, j] * Xk
-                for r in range(self.polydeg):
-                    xpc = xpc + C[r + 1, j] * Xc[r]
-
-                # Append collocation equations
-                fj, qj = self.func_dynamics(Xc[j - 1], Uk)
-                g.append(self.dt * fj - xpc)
-                lbg.append([0] * nstates)
-                ubg.append([0] * nstates)
-
-                # Add contribution to the end state
-                Xk_end = Xk_end + D[j] * Xc[j - 1]
-
-                # Add contribution to quadrature function
-                # J = J + B[j] * qj * dt
-                J = J + B[j] * qj
-
-            # New NLP variable for state at end of interval
-            Xk = ca.MX.sym("X_" + str(k + 1), nstates)
-            w.append(Xk)
-            X.append(Xk)
-
-            if k < self.nodes - 1:
-                # normal boundary conditions
-                lbw.append(self.x_lb)
-                ubw.append(self.x_ub)
-            else:
-                # Final bounday conditions
-                lbw.append(self.x_f_lb)
-                ubw.append(self.x_f_ub)
-
-            w0.append(self.x_guess[k])
-
-            # Add equality constraint
-            g.append(Xk_end - Xk)
-            lbg.append([0] * nstates)
-            ubg.append([0] * nstates)
-
-        w.append(self.ts_final)
-        lbw.append([0])
-        ubw.append([ca.inf])
-        w0.append([3600])
-
-        # smooth Mach number changes
+        # Smooth Mach number changes
         for k in range(1, self.nodes):
-            g.append(U[k][0] - U[k - 1][0])
-            lbg.append([-0.05])
-            ubg.append([0.05])
+            opti.subject_to(opti.bounded(-0.05, U[k][0] - U[k - 1][0], 0.05))
 
-        # total energy model
+        # Total energy model
         for k in range(self.nodes - 1):
             hk = X[k][2]
             hk1 = X[k + 1][2]
-            vs = U[k][1]
             vk = oc.aero.mach2tas(U[k][0], hk, dT=self.dT)
             vk1 = oc.aero.mach2tas(U[k + 1][0], hk1, dT=self.dT)
             dvdt = (vk1 - vk) / self.dt
             dhdt = (hk1 - hk) / self.dt
             thrust_max = self.thrust.climb(0, hk / ft, 0, dT=self.dT)
             drag = self.drag.clean(X[k][3], vk / kts, hk / ft, dT=self.dT)
-            g.append((thrust_max - drag) / X[k][3] - oc.aero.g0 / vk * dhdt - dvdt)
-            lbg.append([0])
-            ubg.append([ca.inf])
+            opti.subject_to(
+                (thrust_max - drag) / X[k][3] - oc.aero.g0 / vk * dhdt - dvdt
+                >= 0
+            )
 
-        # constrain time and dt
+        # Constrain time and dt
         for k in range(1, self.nodes):
-            g.append(X[k][4] - X[k - 1][4] - self.dt)
-            lbg.append([-1])
-            ubg.append([1])
+            opti.subject_to(
+                opti.bounded(-1, X[k][4] - X[k - 1][4] - self.dt, 1)
+            )
 
-        # smooth vertical rate changes
+        # Smooth vertical rate changes
         for k in range(1, self.nodes):
-            g.append(U[k][1] - U[k - 1][1])
-            lbg.append([-500 * fpm])
-            ubg.append([500 * fpm])
+            opti.subject_to(
+                opti.bounded(-500 * fpm, U[k][1] - U[k - 1][1], 500 * fpm)
+            )
 
-        # smooth heading changes
+        # Smooth heading changes
         for k in range(1, self.nodes - 1):
-            g.append(U[k][2] - U[k - 1][2])
-            lbg.append([-5 * pi / 180])
-            ubg.append([5 * pi / 180])
+            opti.subject_to(
+                opti.bounded(
+                    -5 * pi / 180, U[k][2] - U[k - 1][2], 5 * pi / 180
+                )
+            )
 
-        # final position should be along the cruise trajectory
+        # Final position should be along the cruise trajectory
         if df_cruise is not None:
             xp_1, yp_1 = df_cruise.x.iloc[0], df_cruise.y.iloc[0]
             xp_2, yp_2 = df_cruise.x.iloc[1], df_cruise.y.iloc[1]
-            g.append((yp_2 - yp_1) / (xp_2 - xp_1) - (X[-1][1] - yp_1) / (X[-1][0] - xp_1))
-            lbg.append([0])
-            ubg.append([0])
+            opti.subject_to(
+                (yp_2 - yp_1) / (xp_2 - xp_1)
+                == (X[-1][1] - yp_1) / (X[-1][0] - xp_1)
+            )
 
-        # fixed range
+        # Fixed range
         xp_0, yp_0 = self.proj(self.lon1, self.lat1)
-        g.append(ca.sqrt((X[-1][0] - xp_0) ** 2 + (X[-1][1] - yp_0) ** 2))
-        lbg.append([self.traj_range])
-        ubg.append([self.traj_range])
+        climb_range = ca.sqrt(
+            (X[-1][0] - xp_0) ** 2 + (X[-1][1] - yp_0) ** 2
+        )
+        opti.subject_to(climb_range == self.traj_range)
 
-        # Concatenate vectors
-        w = ca.vertcat(*w)
-        g = ca.vertcat(*g)
-        X = ca.horzcat(*X)
-        U = ca.horzcat(*U)
-        w0 = np.concatenate(w0)
-        lbw = np.concatenate(lbw)
-        ubw = np.concatenate(ubw)
-        lbg = np.concatenate(lbg)
-        ubg = np.concatenate(ubg)
-
-        # Create an NLP solver
-        nlp = {"f": J, "x": w, "g": g}
-
-        self.solver = ca.nlpsol("solver", "ipopt", nlp, self.solver_options)
-
-        self.solution = self.solver(x0=w0, lbx=lbw, ubx=ubw, lbg=lbg, ubg=ubg)
-
-        # final timestep
-        ts_final = self.solution["x"][-1].full()[0][0]
-
-        # Function to get x and u from w
-        output = ca.Function("output", [w], [X, U], ["w"], ["x", "u"])
-        x_opt, u_opt = output(self.solution["x"])
-
-        df = self.to_trajectory(ts_final, x_opt, u_opt, **kwargs)
+        # --- Solve ---
+        df = self._solve(X, U, **kwargs)
 
         remove_cruise = kwargs.get("remove_cruise", True)
         if remove_cruise:
