@@ -234,6 +234,20 @@ class Base:
         acceptable_tol: float = 1e-4,
         ipopt_kwargs=None,
     ):
+        """Configure the optimizer discretization and solver settings.
+
+        Args:
+            nodes: Number of collocation intervals. Default auto-computed
+                from distance (~1 per 50 km, clamped to [20, max_nodes]).
+            polydeg: Collocation polynomial degree. Default 3 (Legendre).
+            debug: Print solver output. Default False.
+            max_nodes: Upper limit for auto-computed nodes. Default 120.
+            max_iter: IPOPT maximum iterations. Default 3000.
+            tol: IPOPT convergence tolerance. Default 1e-6.
+            acceptable_tol: IPOPT acceptable tolerance. Default 1e-4.
+            ipopt_kwargs: Additional IPOPT options as {key: value}.
+                Keys are passed as "ipopt.{key}".
+        """
         if ipopt_kwargs is None:
             ipopt_kwargs = {}
         if nodes is not None:
