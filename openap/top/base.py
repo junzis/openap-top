@@ -652,8 +652,8 @@ class Base:
         time_dependent = kwargs.get("time_dependent", True)
         n_dim = kwargs.get("n_dim", 4)
 
-        X = x_opt.full()
-        U = u_opt.full()
+        X = x_opt if isinstance(x_opt, np.ndarray) else x_opt.full()
+        U = u_opt if isinstance(u_opt, np.ndarray) else u_opt.full()
 
         # Extrapolate the final control point, Uf
         U2 = U[:, -2:-1]
