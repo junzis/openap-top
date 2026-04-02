@@ -40,6 +40,29 @@ def read_grids(paths: str | list[str], engine=None) -> pd.DataFrame:
     return df
 
 
+def make_projection(lat1, lon1, lat2, lon2):
+    """Create a pyproj Lambert Conformal Conic projection centered on two points.
+
+    Args:
+        lat1, lon1: Latitude and longitude of the first point.
+        lat2, lon2: Latitude and longitude of the second point.
+
+    Returns:
+        pyproj.Proj: Projection object. Call proj(lon, lat) to get (x, y)
+        in meters, or proj(x, y, inverse=True) to get (lon, lat).
+    """
+    from pyproj import Proj
+
+    return Proj(
+        proj="lcc",
+        ellps="WGS84",
+        lat_1=min(lat1, lat2),
+        lat_2=max(lat1, lat2),
+        lat_0=(lat1 + lat2) / 2,
+        lon_0=(lon1 + lon2) / 2,
+    )
+
+
 class PolyWind:
     """
     A class to model wind fields using second order polynomial regression.
