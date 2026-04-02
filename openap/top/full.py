@@ -236,25 +236,6 @@ class MultiPhase(Base):
         self.climb.wind = w
         self.descent.wind = w
 
-    def change_engine(self, engtype):
-        self.cruise.engtype = engtype
-        self.cruise.engine = oc.prop.engine(engtype)
-        self.cruise.thrust = oc.Thrust(self.actype, engtype)
-        self.cruise.fuelflow = oc.FuelFlow(self.actype, engtype, polydeg=2)
-        self.cruise.emission = oc.Emission(self.actype, engtype)
-
-        self.climb.engtype = engtype
-        self.climb.engine = oc.prop.engine(engtype)
-        self.climb.thrust = oc.Thrust(self.actype, engtype)
-        self.climb.fuelflow = oc.FuelFlow(self.actype, engtype, polydeg=2)
-        self.climb.emission = oc.Emission(self.actype, engtype)
-
-        self.descent.engtype = engtype
-        self.descent.engine = oc.prop.engine(engtype)
-        self.descent.thrust = oc.Thrust(self.actype, engtype)
-        self.descent.fuelflow = oc.FuelFlow(self.actype, engtype, polydeg=2)
-        self.descent.emission = oc.Emission(self.actype, engtype)
-
     def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
         """
         Calculate the optimal trajectory including climb, cruise, and descent phases.

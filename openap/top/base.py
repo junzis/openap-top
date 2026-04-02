@@ -24,6 +24,7 @@ class Base:
         m0: float = 0.8,
         dT: float = 0.0,
         use_synonym=False,
+        engine: str = None,
     ):
         """OpenAP trajectory optimizer.
 
@@ -33,6 +34,7 @@ class Base:
             destination (Union[str, tuple]): ICAO or IATA code of airport, or tuple (lat, lon)
             m0 (float, optional): Takeoff mass factor. Defaults to 0.8 (of MTOW).
             dT (float, optional): Temperature shift from standard ISA. Default = 0
+            engine (str, optional): Engine type. Defaults to aircraft's default engine.
         """
         if isinstance(origin, str):
             ap1 = openap.nav.airport(origin)
@@ -48,8 +50,8 @@ class Base:
 
         self.actype = actype
         self.aircraft = oc.prop.aircraft(self.actype, use_synonym=use_synonym)
-        self.engtype = self.aircraft["engine"]["default"]
-        self.engine = oc.prop.engine(self.aircraft["engine"]["default"])
+        self.engtype = engine or self.aircraft["engine"]["default"]
+        self.engine = oc.prop.engine(self.engtype)
 
         self.mass_init = m0 * self.aircraft["mtow"]
         self.oew = self.aircraft["oew"]
@@ -59,14 +61,21 @@ class Base:
         self.dT = dT
 
         self.use_synonym = use_synonym
+        force_engine = engine is not None
 
-        self.thrust = oc.Thrust(actype, use_synonym=self.use_synonym)
+        self.thrust = oc.Thrust(
+            actype, self.engtype, use_synonym=self.use_synonym,
+            force_engine=force_engine,
+        )
         self.wrap = openap.WRAP(actype, use_synonym=self.use_synonym)
         self.drag = oc.Drag(actype, wave_drag=True, use_synonym=self.use_synonym)
         self.fuelflow = oc.FuelFlow(
-            actype, wave_drag=True, use_synonym=self.use_synonym
+            actype, self.engtype, wave_drag=True, use_synonym=self.use_synonym,
+            force_engine=force_engine,
         )
-        self.emission = oc.Emission(actype, use_synonym=self.use_synonym)
+        self.emission = oc.Emission(
+            actype, self.engtype, use_synonym=self.use_synonym,
+        )
 
         # from pyproj import Proj
         # self.proj = Proj(
@@ -149,24 +158,6 @@ class Base:
         self.wind = tools.PolyWind(
             windfield, self.proj, self.lat1, self.lon1, self.lat2, self.lon2
         )
-
-    def change_engine(self, engtype):
-        self.engtype = engtype
-        self.engine = oc.prop.engine(engtype)
-        self.thrust = oc.Thrust(
-            self.actype,
-            engtype,
-            use_synonym=self.use_synonym,
-            force_engine=True,
-        )
-        self.fuelflow = oc.FuelFlow(
-            self.actype,
-            engtype,
-            wave_drag=True,
-            use_synonym=self.use_synonym,
-            force_engine=True,
-        )
-        self.emission = oc.Emission(self.actype, engtype, use_synonym=self.use_synonym)
 
     def collocation_coeff(self):
         # Get collocation points using Legendre polynomials
