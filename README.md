@@ -144,6 +144,30 @@ def my_objective(x, u, dt, **kwargs):
 flight = optimizer.trajectory(objective=my_objective)
 ```
 
+### Improving convergence on hard blended objectives
+
+IPOPT's termination tolerances assume an objective of magnitude O(1). On non-convex blended objectives (contrail + CO₂ being the canonical case), the total cost can span several orders of magnitude, and the solver may hit `max_iter` without converging or drift to a worse local optimum.
+
+The opt-in `auto_rescale_objective=True` kwarg evaluates the objective at the initial guess, divides the symbolic objective by `max(|f(x0)|, 1.0)`, and restores physical units in `objective_value` post-solve. Mathematically this is a no-op on the optimal `x`, but it re-calibrates IPOPT's tolerance semantics.
+
+```python
+optimizer = top.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
+warmstart = optimizer.trajectory(objective="fuel")
+
+flight = optimizer.trajectory(
+    objective=contrail_co2_blend,
+    interpolant=interpolant,
+    initial_guess=warmstart,
+    n_dim=4,
+    time_dependent=True,
+    auto_rescale_objective=True,   # rescue stalled solves on blended objectives
+)
+```
+
+On the `EHAM-LGAV` CompleteFlight contrail + CO₂ case, this turns a `max_iter` failure (~300 s wall time) into a ~100-iter success (~15 s) — see `debug/scaling/investigation/` for the full empirical matrix. The recipe is: start from a fuel-only warmstart, then re-solve with the blended objective and `auto_rescale_objective=True`.
+
+Default is `False` — behavior is unchanged unless you opt in.
+
 ## Accessing Solver Results
 
 After calling `.trajectory()`, the optimizer exposes:

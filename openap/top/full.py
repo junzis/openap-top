@@ -85,6 +85,11 @@ class CompleteFlight(Base):
                 max_fuel: Maximum fuel constraint (kg).
                 initial_guess: DataFrame to use as initial guess.
                 return_failed: Return result even if optimization fails.
+                auto_rescale_objective: Divide the objective by its value at
+                    the initial guess so IPOPT sees ``f(x0) ≈ 1``. Helps on
+                    non-convex blended objectives (contrail + CO₂) where the
+                    default objective magnitude stalls the solver. Default
+                    False. See README for the hard-case recipe.
 
         Returns:
             pd.DataFrame: Optimized trajectory.
