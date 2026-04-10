@@ -278,6 +278,137 @@ def evaluate_blended_on_trajectory(df_traj: pd.DataFrame, coef: float) -> float:
     return grid_sum * coef + fuel_sum * (1 - coef)
 
 
+# ============================================================
+# Solve runner
+# ============================================================
+
+
+@dataclass
+class SolveResult:
+    phase: str
+    config: str
+    success: bool
+    return_status: str
+    iter_count: int
+    wall_time_s: float
+    final_objective: float  # from optimizer.objective_value (scaled by rescale)
+    blended_physical: float  # re-evaluated from trajectory columns
+    grid_sum: float
+    fuel_sum: float
+    traj: pd.DataFrame
+    iterations: dict  # per-iter arrays from solver.stats()
+    parsed_log: dict  # from parse_ipopt_log
+    log_path: Path
+
+
+def _configure_solver(optimizer, config: str, log_path: Path) -> None:
+    """Apply the given scaling config via ipopt_kwargs."""
+    ipopt_kwargs = {
+        "output_file": str(log_path),
+        "file_print_level": 5,
+        "print_info_string": "yes",
+    }
+    if config == "none":
+        ipopt_kwargs["nlp_scaling_method"] = "none"
+    else:
+        ipopt_kwargs["nlp_scaling_method"] = "gradient-based"
+
+    optimizer.setup(
+        debug=False,
+        max_iter=3000,
+        tol=1e-6,
+        ipopt_kwargs=ipopt_kwargs,
+    )
+
+
+def _extract_iterations(stats: dict) -> dict:
+    """Safely extract per-iteration arrays from solver.stats()."""
+    it = stats.get("iterations", {}) or {}
+    keys = ("obj", "inf_pr", "inf_du", "mu", "d_norm", "alpha_pr", "alpha_du")
+    out: dict = {}
+    for k in keys:
+        v = it.get(k)
+        if v is not None:
+            out[k] = list(v)
+    return out
+
+
+def run_one(
+    phase_cls,
+    phase_name: str,
+    config: str,
+    interpolant,
+    warmstart_df: pd.DataFrame,
+    f0: float,
+    log_path: Path,
+) -> SolveResult:
+    """Run one (phase, config) solve and capture diagnostics.
+
+    Args:
+        phase_cls: top.Cruise or top.CompleteFlight
+        phase_name: "Cruise" or "CompleteFlight"
+        config: one of CONFIGS
+        interpolant: CasADi interpolant for grid cost
+        warmstart_df: fuel-only optimal trajectory used as initial guess
+        f0: blended objective evaluated on the warmstart, for obj_rescaled
+        log_path: where to write the IPOPT output file
+    """
+    optimizer = phase_cls(AIRCRAFT, ORIGIN, DESTINATION, M0)
+    _configure_solver(optimizer, config, log_path)
+
+    rescale = f0 if config == "obj_rescaled" else 1.0
+    objective = make_student_objective(optimizer, interpolant, coef=COEF, rescale=rescale)
+
+    t0 = time.time()
+    try:
+        df_traj = optimizer.trajectory(
+            objective=objective,
+            interpolant=interpolant,
+            initial_guess=warmstart_df,
+            time_dependent=True,
+            n_dim=4,
+            return_failed=True,
+        )
+    except Exception as exc:  # pragma: no cover — defensive
+        print(f"  [{phase_name} / {config}] solve raised: {exc}", file=sys.stderr)
+        raise
+    wall = time.time() - t0
+
+    stats = optimizer.solver.stats()
+    parsed = parse_ipopt_log(log_path)
+    blended_physical = evaluate_blended_on_trajectory(df_traj, coef=COEF)
+
+    return SolveResult(
+        phase=phase_name,
+        config=config,
+        success=bool(stats.get("success", False)),
+        return_status=str(stats.get("return_status", "UNKNOWN")),
+        iter_count=int(stats.get("iter_count", -1)),
+        wall_time_s=wall,
+        final_objective=float(optimizer.objective_value),
+        blended_physical=blended_physical,
+        grid_sum=float(df_traj["grid_cost"].sum()),
+        fuel_sum=float(df_traj["fuel_cost"].sum()),
+        traj=df_traj,
+        iterations=_extract_iterations(stats),
+        parsed_log=parsed,
+        log_path=log_path,
+    )
+
+
+def run_fuel_warmstart(phase_cls, phase_name: str) -> pd.DataFrame:
+    """Run the fuel-only solve used as warmstart for the contrail+CO2 configs.
+
+    Uses IPOPT defaults (gradient-based), no file logging.
+    """
+    optimizer = phase_cls(AIRCRAFT, ORIGIN, DESTINATION, M0)
+    optimizer.setup(debug=False, max_iter=3000)
+    df = optimizer.trajectory(objective="fuel")
+    if df is None or df.empty:
+        raise RuntimeError(f"Fuel-only warmstart failed for {phase_name}")
+    return df
+
+
 def main() -> int:
     raise NotImplementedError("filled in by Task 7")
 
