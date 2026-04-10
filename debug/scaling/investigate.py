@@ -61,12 +61,10 @@ FIGSHARE_URL = "https://ndownloader.figshare.com/files/55632059"
 OUTPUT_DIR = Path(__file__).parent / "investigation"
 
 # Solver configs
-#   default           : IPOPT gradient-based scaling (default behaviour)
-#   none              : no IPOPT scaling
-#   obj_rescaled      : gradient-based + Python-side objective / f0
-#   var_scaled        : gradient-based + opti.set_linear_scale per variable
-#   var+obj_rescaled  : combine var_scaled and obj_rescaled
-CONFIGS = ("default", "none", "obj_rescaled", "var_scaled", "var+obj_rescaled")
+#   default       : IPOPT gradient-based scaling (default behaviour)
+#   none          : no IPOPT scaling
+#   obj_rescaled  : gradient-based + Python-side objective / f0
+CONFIGS = ("default", "none", "obj_rescaled")
 
 
 # ============================================================
@@ -373,8 +371,7 @@ def run_one(
     optimizer = phase_cls(AIRCRAFT, origin, destination, M0)
     _configure_solver(optimizer, config, log_path)
 
-    rescale = f0 if config in ("obj_rescaled", "var+obj_rescaled") else 1.0
-    scale_variables = config in ("var_scaled", "var+obj_rescaled")
+    rescale = f0 if config == "obj_rescaled" else 1.0
     objective = make_student_objective(
         optimizer, interpolant, coef=COEF, rescale=rescale
     )
@@ -388,7 +385,6 @@ def run_one(
             time_dependent=True,
             n_dim=4,
             return_failed=True,
-            scale_variables=scale_variables,
         )
     except Exception as exc:  # pragma: no cover — defensive
         print(f"  [{phase_name} / {config}] solve raised: {exc}", file=sys.stderr)
