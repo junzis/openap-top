@@ -2,6 +2,7 @@ tmp
 debug/
 /test*.py
 docs/superpowers/
+tests/benchmarks/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
