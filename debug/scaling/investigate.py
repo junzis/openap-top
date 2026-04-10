@@ -255,7 +255,9 @@ def make_student_objective(optimizer, interpolant, coef: float, rescale: float =
 
     def objective(x, u, dt, **kwargs):
         kw = {
-            k: v for k, v in kwargs.items() if k not in ("time_dependent", "n_dim")
+            k: v
+            for k, v in kwargs.items()
+            if k not in ("time_dependent", "n_dim", "interpolant")
         }
         grid_cost = optimizer.obj_grid_cost(
             x, u, dt, interpolant=interpolant, time_dependent=True, n_dim=4, **kw
