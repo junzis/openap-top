@@ -409,6 +409,213 @@ def run_fuel_warmstart(phase_cls, phase_name: str) -> pd.DataFrame:
     return df
 
 
+# ============================================================
+# Report writer
+# ============================================================
+
+
+@dataclass
+class InvestigationRun:
+    timestamp: datetime
+    git_commit: str
+    hostname: str
+    data_path: Path
+    data_size_bytes: int
+    data_mtime: datetime
+    grid_t0: str
+    grid_t1: str
+    bbox: tuple[float, float, float, float]
+    coef: float
+    results: list[SolveResult] = field(default_factory=list)
+
+    @property
+    def output_dir(self) -> Path:
+        stamp = self.timestamp.strftime("%Y-%m-%d-%H-%M")
+        d = OUTPUT_DIR / stamp
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def log_path(self, phase: str, config: str) -> Path:
+        return self.output_dir / f"ipopt_{phase}_{config}.log"
+
+    def csv_path(self, phase: str, config: str) -> Path:
+        return self.output_dir / f"{phase}_{config}_iters.csv"
+
+    def report_path(self) -> Path:
+        return self.output_dir / "report.md"
+
+
+def _git_commit() -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], text=True
+        ).strip()
+    except Exception:
+        return "unknown"
+
+
+def _fmt_sci(x: float | None) -> str:
+    if x is None:
+        return "—"
+    return f"{x:.3e}"
+
+
+def _write_iter_csv(result: SolveResult, path: Path) -> None:
+    if not result.iterations:
+        return
+    df = pd.DataFrame(result.iterations)
+    df.index.name = "iter"
+    df.to_csv(path)
+
+
+def write_report(run: InvestigationRun) -> Path:
+    """Write the markdown report + sidecar iter CSVs. Returns the report path."""
+    lines: list[str] = []
+
+    lines.append(f"# NLP scaling investigation — {run.timestamp.isoformat()}")
+    lines.append("")
+    lines.append("## Run metadata")
+    lines.append("")
+    lines.append(f"- Git commit: `{run.git_commit}`")
+    lines.append(f"- Host: `{run.hostname}`")
+    lines.append(f"- Route: {ORIGIN} → {DESTINATION}, {AIRCRAFT}, M0={M0}")
+    lines.append(f"- Objective coef: {run.coef}")
+    lines.append(
+        f"- Data: `{run.data_path}` "
+        f"({run.data_size_bytes / 1024 / 1024:.1f} MB, mtime {run.data_mtime.isoformat()})"
+    )
+    lines.append(f"- Grid window: {run.grid_t0} .. {run.grid_t1}")
+    lmin, lmax, omin, omax = run.bbox
+    lines.append(
+        f"- Bbox: lat=[{lmin:.2f}, {lmax:.2f}], lon=[{omin:.2f}, {omax:.2f}]"
+    )
+    lines.append("")
+
+    phases = sorted({r.phase for r in run.results})
+    for phase in phases:
+        phase_results = [r for r in run.results if r.phase == phase]
+        lines.append(f"## Phase: {phase}")
+        lines.append("")
+
+        # --- Summary table ---
+        lines.append(
+            "| config | success | iter | restoration | wall (s) | "
+            "blended (phys) | grid sum | fuel sum | scaled NLP err |"
+        )
+        lines.append(
+            "|---|---|---|---|---|---|---|---|---|"
+        )
+        for r in phase_results:
+            restoration = r.parsed_log.get("restoration_count", 0)
+            nlp_err = r.parsed_log.get("final_scaled_nlp_error")
+            lines.append(
+                f"| {r.config} | {r.success} | {r.iter_count} | {restoration} "
+                f"| {r.wall_time_s:.1f} | {r.blended_physical:.4e} "
+                f"| {r.grid_sum:.4e} | {r.fuel_sum:.4e} | {_fmt_sci(nlp_err)} |"
+            )
+        lines.append("")
+
+        # --- Iteration traces (sidecar CSVs, summary in report) ---
+        lines.append("### Iteration traces")
+        lines.append("")
+        for r in phase_results:
+            _write_iter_csv(r, run.csv_path(r.phase, r.config))
+            lines.append(
+                f"- `{r.config}`: {r.iter_count} iters, "
+                f"final obj = {r.final_objective:.4e}, "
+                f"return_status = `{r.return_status}`, "
+                f"CSV → `{run.csv_path(r.phase, r.config).name}`"
+            )
+        lines.append("")
+
+        # --- IPOPT scaling factors ---
+        lines.append("### IPOPT-chosen scaling factors")
+        lines.append("")
+        lines.append(
+            "| config | x count | x min | x median | x max | "
+            "c count | c min | c median | c max |"
+        )
+        lines.append("|---|---|---|---|---|---|---|---|---|")
+        for r in phase_results:
+            pl = r.parsed_log
+            lines.append(
+                f"| {r.config} "
+                f"| {pl.get('x_scaling_count', '—')} "
+                f"| {_fmt_sci(pl.get('x_scaling_min'))} "
+                f"| {_fmt_sci(pl.get('x_scaling_median'))} "
+                f"| {_fmt_sci(pl.get('x_scaling_max'))} "
+                f"| {pl.get('c_scaling_count', '—')} "
+                f"| {_fmt_sci(pl.get('c_scaling_min'))} "
+                f"| {_fmt_sci(pl.get('c_scaling_median'))} "
+                f"| {_fmt_sci(pl.get('c_scaling_max'))} |"
+            )
+        lines.append("")
+
+        # --- Solution quality cross-check ---
+        lines.append("### Solution quality cross-check (pairwise)")
+        lines.append("")
+        lines.append(
+            "| a | b | max alt diff (ft) | max mass diff (kg) | "
+            "max lat diff | max lon diff | blended gap |"
+        )
+        lines.append("|---|---|---|---|---|---|---|")
+        for i, r1 in enumerate(phase_results):
+            for r2 in phase_results[i + 1 :]:
+                cmp = _compare_trajectories(r1.traj, r2.traj)
+                gap = (
+                    abs(r1.blended_physical - r2.blended_physical)
+                    / max(abs(r1.blended_physical), abs(r2.blended_physical), 1e-15)
+                )
+                label = "CLEAN" if gap < 0.01 else "DIVERGENT"
+                lines.append(
+                    f"| {r1.config} | {r2.config} "
+                    f"| {cmp['alt']:.0f} | {cmp['mass']:.1f} "
+                    f"| {cmp['lat']:.4f} | {cmp['lon']:.4f} "
+                    f"| {gap * 100:.2f}% ({label}) |"
+                )
+        lines.append("")
+
+    # --- Findings placeholder for human to fill in ---
+    lines.append("## Findings")
+    lines.append("")
+    lines.append("_(write a 5-10 line summary after reading the tables above)_")
+    lines.append("")
+
+    report_path = run.report_path()
+    report_path.write_text("\n".join(lines))
+    return report_path
+
+
+def _compare_trajectories(a: pd.DataFrame, b: pd.DataFrame) -> dict:
+    """Compute max pointwise diffs between two trajectories.
+
+    If lengths differ, resamples both onto a shared time axis (linear interp
+    against ``ts``). Columns compared: altitude, mass, latitude, longitude.
+    """
+    if len(a) != len(b):
+        ts_common = np.linspace(
+            max(a["ts"].iloc[0], b["ts"].iloc[0]),
+            min(a["ts"].iloc[-1], b["ts"].iloc[-1]),
+            num=min(len(a), len(b)),
+        )
+
+        def _interp(df, col):
+            return np.interp(ts_common, df["ts"].values, df[col].values)
+
+        return {
+            "alt": float(np.abs(_interp(a, "altitude") - _interp(b, "altitude")).max()),
+            "mass": float(np.abs(_interp(a, "mass") - _interp(b, "mass")).max()),
+            "lat": float(np.abs(_interp(a, "latitude") - _interp(b, "latitude")).max()),
+            "lon": float(np.abs(_interp(a, "longitude") - _interp(b, "longitude")).max()),
+        }
+    return {
+        "alt": float(np.abs(a["altitude"].values - b["altitude"].values).max()),
+        "mass": float(np.abs(a["mass"].values - b["mass"].values).max()),
+        "lat": float(np.abs(a["latitude"].values - b["latitude"].values).max()),
+        "lon": float(np.abs(a["longitude"].values - b["longitude"].values).max()),
+    }
+
+
 def main() -> int:
     raise NotImplementedError("filled in by Task 7")
 
