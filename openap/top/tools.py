@@ -1,4 +1,5 @@
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Union
 
 import casadi as ca
 import xarray as xr
@@ -190,3 +191,78 @@ def interpolant_from_dataframe(
             df.cost.values,
             shape=shape,
         )
+
+
+def save_interpolant(interpolant: ca.Function, path: Union[str, Path]) -> None:
+    """Serialize a CasADi interpolant to disk for later reuse.
+
+    Building a bspline interpolant over a large 4D cost grid is expensive
+    (cubic-degree tensor-product spline construction can take minutes for
+    grids of ~10^5 points). Saving the built interpolant lets subsequent
+    runs skip the rebuild.
+
+    Args:
+        interpolant: CasADi Function returned by
+            ``interpolant_from_dataframe`` or ``construct_interpolant``.
+        path: Destination file path. The ``.casadi`` extension is
+            conventional but not enforced.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    interpolant.save(str(path))
+
+
+def load_interpolant(path: Union[str, Path]) -> ca.Function:
+    """Load a previously-saved CasADi interpolant from disk.
+
+    Args:
+        path: File path written by :func:`save_interpolant`.
+
+    Returns:
+        ca.Function: The deserialized interpolant, usable immediately
+        with ``Base.obj_grid_cost`` via the ``interpolant`` kwarg.
+
+    Raises:
+        FileNotFoundError: If ``path`` does not exist.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"No cached interpolant at {path}")
+    return ca.Function.load(str(path))
+
+
+def cached_interpolant_from_dataframe(
+    df: pd.DataFrame,
+    cache_path: Union[str, Path],
+    shape: str = "bspline",
+) -> ca.Function:
+    """Load a cached interpolant from disk, or build-and-save if absent.
+
+    This is the recommended helper for workflows that reuse the same cost
+    grid across many trajectories: the first call builds the interpolant
+    (which can take minutes for bspline on a large grid) and writes it to
+    ``cache_path``; subsequent calls skip the build entirely.
+
+    Args:
+        df: Grid DataFrame — same layout expected by
+            :func:`interpolant_from_dataframe` (columns: ``longitude``,
+            ``latitude``, ``height`` in meters, ``cost``; optionally ``ts``).
+        cache_path: Destination file path for the serialized interpolant.
+            Parent directories are created if needed. No cache invalidation
+            is performed — if ``df`` changes, the caller must delete the
+            cache file or use a different path.
+        shape: Interpolation type passed to
+            :func:`interpolant_from_dataframe` on a cache miss. Default
+            ``"bspline"`` (smooth derivatives, clean convergence for
+            non-convex grid-cost objectives).
+
+    Returns:
+        ca.Function: The interpolant, either loaded from ``cache_path`` or
+        freshly built and then saved there.
+    """
+    cache_path = Path(cache_path)
+    if cache_path.exists():
+        return load_interpolant(cache_path)
+    interpolant = interpolant_from_dataframe(df, shape=shape)
+    save_interpolant(interpolant, cache_path)
+    return interpolant
