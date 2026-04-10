@@ -110,7 +110,7 @@ class Cruise(Base):
         return_failed = kwargs.get("return_failed", False)
 
         X, U = self._build_opti(
-            objective, ts_final_guess=self.range * 1000 / 200, **kwargs
+            objective, ts_final_guess=self.range / 200, **kwargs
         )
         opti = self._opti
 
