@@ -3,6 +3,7 @@ debug/
 /test*.py
 docs/superpowers/
 tests/benchmarks/
+debug/scaling/investigation/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
