@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
-from investigate import slice_grid  # noqa: E402
+from investigate import parse_ipopt_log, slice_grid  # noqa: E402
 
 
 def _make_grid_fixture() -> pd.DataFrame:
@@ -72,12 +72,6 @@ def test_slice_grid_rebases_ts_relative_to_t0():
     assert sliced.ts.min() == 0.0
     # Gap between timestamps preserved: 3600s
     assert sorted(sliced.ts.unique().tolist()) == [0.0, 3600.0, 7200.0]
-
-
-try:
-    from investigate import parse_ipopt_log  # noqa: E402
-except ImportError:
-    parse_ipopt_log = None
 
 
 SYNTHETIC_LOG = """\
@@ -143,8 +137,6 @@ EXIT: Solved To Acceptable Level.
 
 
 def test_parse_ipopt_log_extracts_scaling_factors(tmp_path):
-    if parse_ipopt_log is None:
-        pytest.skip("parse_ipopt_log not yet implemented")
     log_path = tmp_path / "ipopt.log"
     log_path.write_text(SYNTHETIC_LOG)
     parsed = parse_ipopt_log(log_path)
@@ -158,8 +150,6 @@ def test_parse_ipopt_log_extracts_scaling_factors(tmp_path):
 
 
 def test_parse_ipopt_log_counts_restoration_phase(tmp_path):
-    if parse_ipopt_log is None:
-        pytest.skip("parse_ipopt_log not yet implemented")
     log_path = tmp_path / "ipopt.log"
     log_path.write_text(SYNTHETIC_LOG)
     parsed = parse_ipopt_log(log_path)
@@ -169,8 +159,6 @@ def test_parse_ipopt_log_counts_restoration_phase(tmp_path):
 
 
 def test_parse_ipopt_log_extracts_final_errors(tmp_path):
-    if parse_ipopt_log is None:
-        pytest.skip("parse_ipopt_log not yet implemented")
     log_path = tmp_path / "ipopt.log"
     log_path.write_text(SYNTHETIC_LOG)
     parsed = parse_ipopt_log(log_path)
@@ -182,7 +170,5 @@ def test_parse_ipopt_log_extracts_final_errors(tmp_path):
 
 
 def test_parse_ipopt_log_missing_file_returns_empty():
-    if parse_ipopt_log is None:
-        pytest.skip("parse_ipopt_log not yet implemented")
     parsed = parse_ipopt_log(Path("/tmp/does-not-exist-xyz.log"))
     assert parsed == {}
