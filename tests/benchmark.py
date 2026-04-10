@@ -424,14 +424,15 @@ def run_with_uv(version):
     """Run benchmark in an isolated uv env with pip-installed version.
 
     Args:
-        version: PyPI version string (e.g. "2.0.0").
+        version: PyPI version string. Accepts "2.0.0" or "v2.0.0".
 
     Returns:
         Results dict parsed from the subprocess JSON output.
     """
+    pypi_version = version.lstrip("v")
     cmd = [
         "uv", "run", "--no-project",
-        "--with", f"openap-top=={version}",
+        "--with", f"openap-top=={pypi_version}",
         "python", str(Path(__file__).resolve()), "--run-only",
     ]
     result = subprocess.run(
