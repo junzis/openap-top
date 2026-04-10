@@ -487,6 +487,26 @@ class Base:
             # Continuity constraint
             self._opti.subject_to(Xk_end == Xk)
 
+        # Optional: rescale the objective by its value at the initial guess
+        # so IPOPT sees f(x0) ≈ 1. This improves termination behaviour on
+        # non-convex blended objectives (contrail + CO2) — see the
+        # investigation report at
+        # debug/scaling/investigation/2026-04-10-19-35/report.md for
+        # empirical results (16× wall-time speedup on EHAM-LGAV CompleteFlight
+        # contrail+CO2, turns a max_iter failure into a 19 s success).
+        self._objective_rescale = 1.0
+        if kwargs.get("auto_rescale_objective", False):
+            x_init = self._opti.debug.value(self._opti.x, self._opti.initial())
+            j_at_init = ca.Function("j_at_init", [self._opti.x], [J])
+            f0 = float(j_at_init(x_init))
+            self._objective_rescale = max(abs(f0), 1.0)
+            J = J / self._objective_rescale
+            if self.debug:
+                print(
+                    f"  auto_rescale_objective: f0={f0:.4e}, "
+                    f"rescale={self._objective_rescale:.4e}"
+                )
+
         self._opti.minimize(J)
 
         return X, U
@@ -512,7 +532,8 @@ class Base:
             sol = self._opti.debug
 
         self.solver = sol
-        self.objective_value = float(sol.value(self._opti.f))
+        # Undo auto_rescale_objective so callers always see the physical value.
+        self.objective_value = float(sol.value(self._opti.f)) * self._objective_rescale
 
         ts_final_val = float(sol.value(self.ts_final))
         x_opt = sol.value(ca.horzcat(*X))
