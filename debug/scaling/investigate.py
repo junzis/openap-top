@@ -34,12 +34,17 @@ if hasattr(openap, "__path__"):
 
 from openap import top  # noqa: E402
 
-# --- Pilot case (see spec §"Pilot case") ---
+# --- Test matrix (see spec §"Pilot case") ---
 AIRCRAFT = "A320"
-ORIGIN = "EHAM"
-DESTINATION = "LGAV"
 M0 = 0.85
 COEF = 0.5
+
+# Routes: short, medium, long. Same as tests/compare_nlp_scaling.py.
+ROUTES = [
+    ("EHAM", "EDDF"),  # Amsterdam - Frankfurt (~370 km, short/easy)
+    ("EGLL", "LEMD"),  # London - Madrid (~1260 km, medium)
+    ("EHAM", "LGAV"),  # Amsterdam - Athens (~2100 km, long/hard)
+]
 
 # Grid slice window (see spec §"Data")
 GRID_T0 = "2022-02-20 10:00:00+00:00"
@@ -56,7 +61,12 @@ FIGSHARE_URL = "https://ndownloader.figshare.com/files/55632059"
 OUTPUT_DIR = Path(__file__).parent / "investigation"
 
 # Solver configs
-CONFIGS = ("default", "none", "obj_rescaled")
+#   default           : IPOPT gradient-based scaling (default behaviour)
+#   none              : no IPOPT scaling
+#   obj_rescaled      : gradient-based + Python-side objective / f0
+#   var_scaled        : gradient-based + opti.set_linear_scale per variable
+#   var+obj_rescaled  : combine var_scaled and obj_rescaled
+CONFIGS = ("default", "none", "obj_rescaled", "var_scaled", "var+obj_rescaled")
 
 
 # ============================================================
@@ -287,6 +297,7 @@ def evaluate_blended_on_trajectory(df_traj: pd.DataFrame, coef: float) -> float:
 
 @dataclass
 class SolveResult:
+    route: str  # e.g. "EHAM-LGAV"
     phase: str
     config: str
     success: bool
@@ -338,6 +349,8 @@ def _extract_iterations(stats: dict) -> dict:
 def run_one(
     phase_cls,
     phase_name: str,
+    origin: str,
+    destination: str,
     config: str,
     interpolant,
     warmstart_df: pd.DataFrame,
@@ -349,17 +362,22 @@ def run_one(
     Args:
         phase_cls: top.Cruise or top.CompleteFlight
         phase_name: "Cruise" or "CompleteFlight"
+        origin: ICAO airport code
+        destination: ICAO airport code
         config: one of CONFIGS
         interpolant: CasADi interpolant for grid cost
         warmstart_df: fuel-only optimal trajectory used as initial guess
         f0: blended objective evaluated on the warmstart, for obj_rescaled
         log_path: where to write the IPOPT output file
     """
-    optimizer = phase_cls(AIRCRAFT, ORIGIN, DESTINATION, M0)
+    optimizer = phase_cls(AIRCRAFT, origin, destination, M0)
     _configure_solver(optimizer, config, log_path)
 
-    rescale = f0 if config == "obj_rescaled" else 1.0
-    objective = make_student_objective(optimizer, interpolant, coef=COEF, rescale=rescale)
+    rescale = f0 if config in ("obj_rescaled", "var+obj_rescaled") else 1.0
+    scale_variables = config in ("var_scaled", "var+obj_rescaled")
+    objective = make_student_objective(
+        optimizer, interpolant, coef=COEF, rescale=rescale
+    )
 
     t0 = time.time()
     try:
@@ -370,6 +388,7 @@ def run_one(
             time_dependent=True,
             n_dim=4,
             return_failed=True,
+            scale_variables=scale_variables,
         )
     except Exception as exc:  # pragma: no cover — defensive
         print(f"  [{phase_name} / {config}] solve raised: {exc}", file=sys.stderr)
@@ -381,6 +400,7 @@ def run_one(
     blended_physical = evaluate_blended_on_trajectory(df_traj, coef=COEF)
 
     return SolveResult(
+        route=f"{origin}-{destination}",
         phase=phase_name,
         config=config,
         success=bool(stats.get("success", False)),
@@ -398,12 +418,14 @@ def run_one(
     )
 
 
-def run_fuel_warmstart(phase_cls, phase_name: str) -> pd.DataFrame:
+def run_fuel_warmstart(
+    phase_cls, phase_name: str, origin: str, destination: str
+) -> pd.DataFrame:
     """Run the fuel-only solve used as warmstart for the contrail+CO2 configs.
 
     Uses IPOPT defaults (gradient-based), no file logging.
     """
-    optimizer = phase_cls(AIRCRAFT, ORIGIN, DESTINATION, M0)
+    optimizer = phase_cls(AIRCRAFT, origin, destination, M0)
     optimizer.setup(debug=False, max_iter=3000)
     df = optimizer.trajectory(objective="fuel")
     if df is None or df.empty:
@@ -426,7 +448,7 @@ class InvestigationRun:
     data_mtime: datetime
     grid_t0: str
     grid_t1: str
-    bbox: tuple[float, float, float, float]
+    routes: list[tuple[str, str]]
     coef: float
     results: list[SolveResult] = field(default_factory=list)
 
@@ -437,11 +459,13 @@ class InvestigationRun:
         d.mkdir(parents=True, exist_ok=True)
         return d
 
-    def log_path(self, phase: str, config: str) -> Path:
-        return self.output_dir / f"ipopt_{phase}_{config}.log"
+    def log_path(self, route: str, phase: str, config: str) -> Path:
+        safe_config = config.replace("+", "_plus_")
+        return self.output_dir / f"ipopt_{route}_{phase}_{safe_config}.log"
 
-    def csv_path(self, phase: str, config: str) -> Path:
-        return self.output_dir / f"{phase}_{config}_iters.csv"
+    def csv_path(self, route: str, phase: str, config: str) -> Path:
+        safe_config = config.replace("+", "_plus_")
+        return self.output_dir / f"{route}_{phase}_{safe_config}_iters.csv"
 
     def report_path(self) -> Path:
         return self.output_dir / "report.md"
@@ -454,12 +478,6 @@ def _git_commit() -> str:
         ).strip()
     except Exception:
         return "unknown"
-
-
-def _fmt_sci(x: float | None) -> str:
-    if x is None:
-        return "—"
-    return f"{x:.3e}"
 
 
 def _write_iter_csv(result: SolveResult, path: Path) -> None:
@@ -480,102 +498,86 @@ def write_report(run: InvestigationRun) -> Path:
     lines.append("")
     lines.append(f"- Git commit: `{run.git_commit}`")
     lines.append(f"- Host: `{run.hostname}`")
-    lines.append(f"- Route: {ORIGIN} → {DESTINATION}, {AIRCRAFT}, M0={M0}")
-    lines.append(f"- Objective coef: {run.coef}")
+    lines.append(f"- Aircraft: {AIRCRAFT}, M0={M0}, coef={run.coef}")
+    routes_str = ", ".join(f"{o}-{d}" for o, d in run.routes)
+    lines.append(f"- Routes: {routes_str}")
     lines.append(
         f"- Data: `{run.data_path}` "
         f"({run.data_size_bytes / 1024 / 1024:.1f} MB, mtime {run.data_mtime.isoformat()})"
     )
     lines.append(f"- Grid window: {run.grid_t0} .. {run.grid_t1}")
-    lmin, lmax, omin, omax = run.bbox
-    lines.append(
-        f"- Bbox: lat=[{lmin:.2f}, {lmax:.2f}], lon=[{omin:.2f}, {omax:.2f}]"
-    )
     lines.append("")
 
-    phases = sorted({r.phase for r in run.results})
+    phases = ["Cruise", "CompleteFlight"]
     for phase in phases:
         phase_results = [r for r in run.results if r.phase == phase]
+        if not phase_results:
+            continue
         lines.append(f"## Phase: {phase}")
         lines.append("")
 
-        # --- Summary table ---
-        lines.append(
-            "| config | success | iter | restoration | wall (s) | "
-            "blended (phys) | grid sum | fuel sum | scaled NLP err |"
-        )
-        lines.append(
-            "|---|---|---|---|---|---|---|---|---|"
-        )
+        # One section per route
+        routes_in_phase = []
         for r in phase_results:
-            restoration = r.parsed_log.get("restoration_count", 0)
-            nlp_err = r.parsed_log.get("final_scaled_nlp_error")
-            lines.append(
-                f"| {r.config} | {r.success} | {r.iter_count} | {restoration} "
-                f"| {r.wall_time_s:.1f} | {r.blended_physical:.4e} "
-                f"| {r.grid_sum:.4e} | {r.fuel_sum:.4e} | {_fmt_sci(nlp_err)} |"
-            )
-        lines.append("")
+            if r.route not in routes_in_phase:
+                routes_in_phase.append(r.route)
 
-        # --- Iteration traces (sidecar CSVs, summary in report) ---
-        lines.append("### Iteration traces")
-        lines.append("")
-        for r in phase_results:
-            _write_iter_csv(r, run.csv_path(r.phase, r.config))
-            lines.append(
-                f"- `{r.config}`: {r.iter_count} iters, "
-                f"final obj = {r.final_objective:.4e}, "
-                f"return_status = `{r.return_status}`, "
-                f"CSV → `{run.csv_path(r.phase, r.config).name}`"
-            )
-        lines.append("")
+        for route in routes_in_phase:
+            route_results = [r for r in phase_results if r.route == route]
+            lines.append(f"### Route: {route}")
+            lines.append("")
 
-        # --- IPOPT scaling factors ---
-        lines.append("### IPOPT-chosen scaling factors")
-        lines.append("")
-        lines.append(
-            "| config | x count | x min | x median | x max | "
-            "c count | c min | c median | c max |"
-        )
-        lines.append("|---|---|---|---|---|---|---|---|---|")
-        for r in phase_results:
-            pl = r.parsed_log
+            # --- Summary table ---
             lines.append(
-                f"| {r.config} "
-                f"| {pl.get('x_scaling_count', '—')} "
-                f"| {_fmt_sci(pl.get('x_scaling_min'))} "
-                f"| {_fmt_sci(pl.get('x_scaling_median'))} "
-                f"| {_fmt_sci(pl.get('x_scaling_max'))} "
-                f"| {pl.get('c_scaling_count', '—')} "
-                f"| {_fmt_sci(pl.get('c_scaling_min'))} "
-                f"| {_fmt_sci(pl.get('c_scaling_median'))} "
-                f"| {_fmt_sci(pl.get('c_scaling_max'))} |"
+                "| config | success | iter | wall (s) | "
+                "blended (phys) | grid sum | fuel sum |"
             )
-        lines.append("")
-
-        # --- Solution quality cross-check ---
-        lines.append("### Solution quality cross-check (pairwise)")
-        lines.append("")
-        lines.append(
-            "| a | b | max alt diff (ft) | max mass diff (kg) | "
-            "max lat diff | max lon diff | blended gap |"
-        )
-        lines.append("|---|---|---|---|---|---|---|")
-        for i, r1 in enumerate(phase_results):
-            for r2 in phase_results[i + 1 :]:
-                cmp = _compare_trajectories(r1.traj, r2.traj)
-                gap = (
-                    abs(r1.blended_physical - r2.blended_physical)
-                    / max(abs(r1.blended_physical), abs(r2.blended_physical), 1e-15)
-                )
-                label = "CLEAN" if gap < 0.01 else "DIVERGENT"
+            lines.append("|---|---|---|---|---|---|---|")
+            for r in route_results:
                 lines.append(
-                    f"| {r1.config} | {r2.config} "
-                    f"| {cmp['alt']:.0f} | {cmp['mass']:.1f} "
-                    f"| {cmp['lat']:.4f} | {cmp['lon']:.4f} "
-                    f"| {gap * 100:.2f}% ({label}) |"
+                    f"| {r.config} | {r.success} | {r.iter_count} "
+                    f"| {r.wall_time_s:.1f} | {r.blended_physical:.4e} "
+                    f"| {r.grid_sum:.4e} | {r.fuel_sum:.4e} |"
                 )
-        lines.append("")
+            lines.append("")
+
+            # --- Iteration traces (CSV sidecar pointers) ---
+            for r in route_results:
+                _write_iter_csv(r, run.csv_path(r.route, r.phase, r.config))
+                lines.append(
+                    f"- `{r.config}`: {r.iter_count} iters, "
+                    f"final obj = {r.final_objective:.4e}, "
+                    f"return_status = `{r.return_status}`, "
+                    f"CSV → `{run.csv_path(r.route, r.phase, r.config).name}`"
+                )
+            lines.append("")
+
+            # --- Solution quality cross-check (only vs 'default' as anchor) ---
+            default_result = next(
+                (r for r in route_results if r.config == "default"), None
+            )
+            if default_result is not None and default_result.success:
+                lines.append("Cross-check vs `default`:")
+                lines.append("")
+                lines.append(
+                    "| config | max alt diff (ft) | max mass diff (kg) | "
+                    "max lat diff | max lon diff | blended gap |"
+                )
+                lines.append("|---|---|---|---|---|---|")
+                for r in route_results:
+                    if r.config == "default" or not r.success:
+                        continue
+                    cmp = _compare_trajectories(default_result.traj, r.traj)
+                    a, b = default_result.blended_physical, r.blended_physical
+                    gap = abs(a - b) / max(abs(a), abs(b), 1e-15)
+                    label = "CLEAN" if gap < 0.01 else "DIVERGENT"
+                    lines.append(
+                        f"| {r.config} "
+                        f"| {cmp['alt']:.0f} | {cmp['mass']:.1f} "
+                        f"| {cmp['lat']:.4f} | {cmp['lon']:.4f} "
+                        f"| {gap * 100:.2f}% ({label}) |"
+                    )
+                lines.append("")
 
     # --- Findings placeholder for human to fill in ---
     lines.append("## Findings")
@@ -618,44 +620,29 @@ def _compare_trajectories(a: pd.DataFrame, b: pd.DataFrame) -> dict:
     }
 
 
-def main() -> int:
-    print("=" * 70)
-    print(f"NLP scaling investigation — {AIRCRAFT} {ORIGIN}-{DESTINATION}")
-    print("=" * 70)
-
-    # --- Load + slice grid ---
-    print(f"\nLoading grid from {DATA_PATH}")
-    df_full = load_grid_parquet(DATA_PATH)
-    print(f"  full shape: {df_full.shape}")
-
-    # Route bbox from endpoints + padding.
-    # Use a throwaway optimizer instance to look up airport lat/lons from the
-    # aircraft/airport database — same as top.Cruise does internally.
-    tmp = top.Cruise(AIRCRAFT, ORIGIN, DESTINATION, M0)
+def _route_bbox(origin: str, destination: str) -> tuple[float, float, float, float]:
+    """Return (lat_min, lat_max, lon_min, lon_max) bbox padded around the route."""
+    tmp = top.Cruise(AIRCRAFT, origin, destination, M0)
     lat1, lon1 = tmp.lat1, tmp.lon1
     lat2, lon2 = tmp.lat2, tmp.lon2
     del tmp
-
-    lat_min = min(lat1, lat2) - BBOX_PADDING_DEG
-    lat_max = max(lat1, lat2) + BBOX_PADDING_DEG
-    lon_min = min(lon1, lon2) - BBOX_PADDING_DEG
-    lon_max = max(lon1, lon2) + BBOX_PADDING_DEG
-    print(
-        f"  bbox: lat=[{lat_min:.2f}, {lat_max:.2f}], "
-        f"lon=[{lon_min:.2f}, {lon_max:.2f}]"
+    return (
+        min(lat1, lat2) - BBOX_PADDING_DEG,
+        max(lat1, lat2) + BBOX_PADDING_DEG,
+        min(lon1, lon2) - BBOX_PADDING_DEG,
+        max(lon1, lon2) + BBOX_PADDING_DEG,
     )
 
-    df_slice = slice_grid(
-        df_full,
-        t0=GRID_T0,
-        t1=GRID_T1,
-        lat_min=lat_min,
-        lat_max=lat_max,
-        lon_min=lon_min,
-        lon_max=lon_max,
-    )
-    print(f"  slice shape: {df_slice.shape}")
-    interpolant = top.tools.interpolant_from_dataframe(df_slice)
+
+def main() -> int:
+    print("=" * 70)
+    print(f"NLP scaling investigation — {AIRCRAFT}, {len(ROUTES)} routes")
+    print("=" * 70)
+
+    # --- Load grid once ---
+    print(f"\nLoading grid from {DATA_PATH}")
+    df_full = load_grid_parquet(DATA_PATH)
+    print(f"  full shape: {df_full.shape}")
 
     # --- Set up run metadata ---
     stat = DATA_PATH.stat()
@@ -668,43 +655,69 @@ def main() -> int:
         data_mtime=datetime.fromtimestamp(stat.st_mtime),
         grid_t0=GRID_T0,
         grid_t1=GRID_T1,
-        bbox=(lat_min, lat_max, lon_min, lon_max),
+        routes=list(ROUTES),
         coef=COEF,
     )
     print(f"\nOutput dir: {run.output_dir}")
 
-    # --- Run 2 phases x 3 configs ---
-    for phase_cls, phase_name in [
-        (top.Cruise, "Cruise"),
-        (top.CompleteFlight, "CompleteFlight"),
-    ]:
-        print(f"\n--- {phase_name} ---")
-        print(f"  [{phase_name}] fuel warmstart ...", flush=True)
-        warmstart = run_fuel_warmstart(phase_cls, phase_name)
+    # --- Loop over routes ---
+    for origin, destination in ROUTES:
+        route_label = f"{origin}-{destination}"
+        print(f"\n{'=' * 70}")
+        print(f"  Route: {route_label}")
+        print(f"{'=' * 70}")
 
-        # f0: blended objective on warmstart (numeric, matches symbolic closely)
-        f0 = evaluate_blended_on_trajectory(warmstart, coef=COEF)
-        print(f"  [{phase_name}] f0 = {f0:.4e}")
+        lat_min, lat_max, lon_min, lon_max = _route_bbox(origin, destination)
+        print(
+            f"  bbox: lat=[{lat_min:.2f}, {lat_max:.2f}], "
+            f"lon=[{lon_min:.2f}, {lon_max:.2f}]"
+        )
+        df_slice = slice_grid(
+            df_full,
+            t0=GRID_T0,
+            t1=GRID_T1,
+            lat_min=lat_min,
+            lat_max=lat_max,
+            lon_min=lon_min,
+            lon_max=lon_max,
+        )
+        print(f"  slice shape: {df_slice.shape}")
+        interpolant = top.tools.interpolant_from_dataframe(df_slice)
 
-        for config in CONFIGS:
-            log_path = run.log_path(phase_name, config)
-            print(f"  [{phase_name} / {config}] solving ...", flush=True)
-            result = run_one(
-                phase_cls=phase_cls,
-                phase_name=phase_name,
-                config=config,
-                interpolant=interpolant,
-                warmstart_df=warmstart,
-                f0=f0,
-                log_path=log_path,
+        # --- 2 phases x 5 configs per route ---
+        for phase_cls, phase_name in [
+            (top.Cruise, "Cruise"),
+            (top.CompleteFlight, "CompleteFlight"),
+        ]:
+            print(f"\n--- {route_label} / {phase_name} ---")
+            print(f"  [{phase_name}] fuel warmstart ...", flush=True)
+            warmstart = run_fuel_warmstart(
+                phase_cls, phase_name, origin, destination
             )
-            print(
-                f"    done: success={result.success} "
-                f"iter={result.iter_count} "
-                f"wall={result.wall_time_s:.1f}s "
-                f"blended={result.blended_physical:.4e}"
-            )
-            run.results.append(result)
+            f0 = evaluate_blended_on_trajectory(warmstart, coef=COEF)
+            print(f"  [{phase_name}] f0 = {f0:.4e}")
+
+            for config in CONFIGS:
+                log_path = run.log_path(route_label, phase_name, config)
+                print(f"  [{phase_name} / {config}] solving ...", flush=True)
+                result = run_one(
+                    phase_cls=phase_cls,
+                    phase_name=phase_name,
+                    origin=origin,
+                    destination=destination,
+                    config=config,
+                    interpolant=interpolant,
+                    warmstart_df=warmstart,
+                    f0=f0,
+                    log_path=log_path,
+                )
+                print(
+                    f"    done: success={result.success} "
+                    f"iter={result.iter_count} "
+                    f"wall={result.wall_time_s:.1f}s "
+                    f"blended={result.blended_physical:.4e}"
+                )
+                run.results.append(result)
 
     # --- Write report ---
     report_path = write_report(run)
