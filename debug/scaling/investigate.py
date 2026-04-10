@@ -617,7 +617,97 @@ def _compare_trajectories(a: pd.DataFrame, b: pd.DataFrame) -> dict:
 
 
 def main() -> int:
-    raise NotImplementedError("filled in by Task 7")
+    print("=" * 70)
+    print(f"NLP scaling investigation — {AIRCRAFT} {ORIGIN}-{DESTINATION}")
+    print("=" * 70)
+
+    # --- Load + slice grid ---
+    print(f"\nLoading grid from {DATA_PATH}")
+    df_full = load_grid_parquet(DATA_PATH)
+    print(f"  full shape: {df_full.shape}")
+
+    # Route bbox from endpoints + padding.
+    # Use a throwaway optimizer instance to look up airport lat/lons from the
+    # aircraft/airport database — same as top.Cruise does internally.
+    tmp = top.Cruise(AIRCRAFT, ORIGIN, DESTINATION, M0)
+    lat1, lon1 = tmp.lat1, tmp.lon1
+    lat2, lon2 = tmp.lat2, tmp.lon2
+    del tmp
+
+    lat_min = min(lat1, lat2) - BBOX_PADDING_DEG
+    lat_max = max(lat1, lat2) + BBOX_PADDING_DEG
+    lon_min = min(lon1, lon2) - BBOX_PADDING_DEG
+    lon_max = max(lon1, lon2) + BBOX_PADDING_DEG
+    print(
+        f"  bbox: lat=[{lat_min:.2f}, {lat_max:.2f}], "
+        f"lon=[{lon_min:.2f}, {lon_max:.2f}]"
+    )
+
+    df_slice = slice_grid(
+        df_full,
+        t0=GRID_T0,
+        t1=GRID_T1,
+        lat_min=lat_min,
+        lat_max=lat_max,
+        lon_min=lon_min,
+        lon_max=lon_max,
+    )
+    print(f"  slice shape: {df_slice.shape}")
+    interpolant = top.tools.interpolant_from_dataframe(df_slice)
+
+    # --- Set up run metadata ---
+    stat = DATA_PATH.stat()
+    run = InvestigationRun(
+        timestamp=datetime.now(),
+        git_commit=_git_commit(),
+        hostname=socket.gethostname(),
+        data_path=DATA_PATH,
+        data_size_bytes=stat.st_size,
+        data_mtime=datetime.fromtimestamp(stat.st_mtime),
+        grid_t0=GRID_T0,
+        grid_t1=GRID_T1,
+        bbox=(lat_min, lat_max, lon_min, lon_max),
+        coef=COEF,
+    )
+    print(f"\nOutput dir: {run.output_dir}")
+
+    # --- Run 2 phases x 3 configs ---
+    for phase_cls, phase_name in [
+        (top.Cruise, "Cruise"),
+        (top.CompleteFlight, "CompleteFlight"),
+    ]:
+        print(f"\n--- {phase_name} ---")
+        print(f"  [{phase_name}] fuel warmstart ...", flush=True)
+        warmstart = run_fuel_warmstart(phase_cls, phase_name)
+
+        # f0: blended objective on warmstart (numeric, matches symbolic closely)
+        f0 = evaluate_blended_on_trajectory(warmstart, coef=COEF)
+        print(f"  [{phase_name}] f0 = {f0:.4e}")
+
+        for config in CONFIGS:
+            log_path = run.log_path(phase_name, config)
+            print(f"  [{phase_name} / {config}] solving ...", flush=True)
+            result = run_one(
+                phase_cls=phase_cls,
+                phase_name=phase_name,
+                config=config,
+                interpolant=interpolant,
+                warmstart_df=warmstart,
+                f0=f0,
+                log_path=log_path,
+            )
+            print(
+                f"    done: success={result.success} "
+                f"iter={result.iter_count} "
+                f"wall={result.wall_time_s:.1f}s "
+                f"blended={result.blended_physical:.4e}"
+            )
+            run.results.append(result)
+
+    # --- Write report ---
+    report_path = write_report(run)
+    print(f"\n✓ Report written to {report_path}")
+    return 0
 
 
 if __name__ == "__main__":
