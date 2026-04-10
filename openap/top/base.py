@@ -377,10 +377,9 @@ class Base:
             objective: Objective function name or callable.
             ts_final_guess: Initial guess for total flight time (seconds).
             **kwargs: Passed through to init_model(). Also recognizes
-                ``scale_variables`` (bool): when True, applies CasADi Opti
-                linear scaling to all state, control, and collocation
-                variables using PR #18-style factors derived from the bounds
-                set by ``init_conditions``.
+                ``auto_rescale_objective`` (bool): when True, divides the
+                objective by its value at the initial guess so IPOPT sees
+                ``f(x0) ≈ 1`` — see the comment block below ``opti.minimize``.
 
         Returns:
             tuple: (X, U) where X is list of state MX vars at each node boundary
@@ -388,26 +387,8 @@ class Base:
         """
         self._opti = ca.Opti()
 
-        scale_variables = kwargs.get("scale_variables", False)
-        if scale_variables:
-            # State scale: [xp, yp, h, m, ts]. Use bounds set by init_conditions.
-            scale_state = ca.DM(
-                [
-                    max(abs(self.x_ub[0] - self.x_lb[0]) / 2, 1.0),
-                    max(abs(self.x_ub[1] - self.x_lb[1]) / 2, 1.0),
-                    max(self.x_ub[2], 1.0),
-                    max(self.mass_init, 1.0),
-                    max(self.x_ub[4], 1.0),
-                ]
-            )
-            # Control scale: [mach, vs, psi]
-            scale_control = ca.DM([1.0, 2500 * fpm, np.pi])
-            scale_ts_final = max(self.x_ub[4], 1.0)
-
         # Free final time — must be set before init_model
         self.ts_final = self._opti.variable()
-        if scale_variables:
-            self._opti.set_linear_scale(self.ts_final, scale_ts_final)
         self._opti.subject_to(self.ts_final >= 0)
         self._opti.set_initial(self.ts_final, ts_final_guess)
         self.dt = self.ts_final / self.nodes
@@ -424,8 +405,6 @@ class Base:
 
         # Initial state
         Xk = self._opti.variable(nstates)
-        if scale_variables:
-            self._opti.set_linear_scale(Xk, scale_state)
         self._opti.subject_to(self._opti.bounded(self.x_0_lb, Xk, self.x_0_ub))
         self._opti.set_initial(Xk, self.x_guess[0])
         X.append(Xk)
@@ -433,8 +412,6 @@ class Base:
         for k in range(self.nodes):
             # Control variable
             Uk = self._opti.variable(self.u.shape[0])
-            if scale_variables:
-                self._opti.set_linear_scale(Uk, scale_control)
             U.append(Uk)
 
             if k == 0:
@@ -451,8 +428,6 @@ class Base:
             Xc = []
             for j in range(self.polydeg):
                 Xkj = self._opti.variable(nstates)
-                if scale_variables:
-                    self._opti.set_linear_scale(Xkj, scale_state)
                 Xc.append(Xkj)
                 self._opti.subject_to(self._opti.bounded(self.x_lb, Xkj, self.x_ub))
                 self._opti.set_initial(Xkj, self.x_guess[k])
@@ -472,8 +447,6 @@ class Base:
 
             # State at end of interval
             Xk = self._opti.variable(nstates)
-            if scale_variables:
-                self._opti.set_linear_scale(Xk, scale_state)
             X.append(Xk)
 
             if k < self.nodes - 1:
