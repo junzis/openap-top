@@ -59,6 +59,74 @@ OUTPUT_DIR = Path(__file__).parent / "investigation"
 CONFIGS = ("default", "none", "obj_rescaled")
 
 
+# ============================================================
+# Grid loading
+# ============================================================
+
+
+def load_grid_parquet(path: Path = DATA_PATH) -> pd.DataFrame:
+    """Load the ERA5 smoothed cost grid from parquet.
+
+    If the file is missing, print the figshare download URL and exit.
+    """
+    if not path.exists():
+        print(f"ERROR: grid file not found at {path}", file=sys.stderr)
+        print(f"Download from: {FIGSHARE_URL}", file=sys.stderr)
+        print(
+            "This is the pre-smoothed ERA5 cost grid from the contrail-or-not "
+            "paper (Sun et al., figshare 10.6084/m9.figshare.29400650).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return pd.read_parquet(path)
+
+
+def slice_grid(
+    df: pd.DataFrame,
+    t0: str,
+    t1: str,
+    lat_min: float,
+    lat_max: float,
+    lon_min: float,
+    lon_max: float,
+) -> pd.DataFrame:
+    """Slice a cost grid dataframe to a bounding box + time window.
+
+    Rebases the ``ts`` column so ``ts=0`` corresponds to ``t0``, matching
+    the optimizer's internal time axis (which starts at 0 at the origin).
+
+    Args:
+        df: Full grid dataframe with columns at least:
+            ``timestamp`` (tz-aware), ``ts``, ``height``, ``latitude``,
+            ``longitude``, ``cost``.
+        t0, t1: ISO-format UTC timestamps bounding the time window.
+        lat_min, lat_max: Latitude bounds (inclusive).
+        lon_min, lon_max: Longitude bounds (inclusive).
+
+    Returns:
+        A filtered dataframe with ``ts`` rebased to start at 0.
+    """
+    t0_ts = pd.Timestamp(t0)
+    t1_ts = pd.Timestamp(t1)
+    mask = (
+        (df["timestamp"] >= t0_ts)
+        & (df["timestamp"] <= t1_ts)
+        & (df["latitude"] >= lat_min)
+        & (df["latitude"] <= lat_max)
+        & (df["longitude"] >= lon_min)
+        & (df["longitude"] <= lon_max)
+    )
+    sliced = df.loc[mask].copy()
+    if sliced.empty:
+        raise ValueError(
+            f"Grid slice is empty for window {t0}..{t1}, "
+            f"bbox lat=[{lat_min},{lat_max}] lon=[{lon_min},{lon_max}]"
+        )
+    start_seconds = sliced["ts"].min()
+    sliced["ts"] = sliced["ts"] - start_seconds
+    return sliced.sort_values(["ts", "height", "latitude", "longitude"])
+
+
 def main() -> int:
     raise NotImplementedError("filled in by Task 7")
 
