@@ -127,6 +127,106 @@ def slice_grid(
     return sliced.sort_values(["ts", "height", "latitude", "longitude"])
 
 
+# ============================================================
+# IPOPT log parser
+# ============================================================
+
+_RE_SCALING_ENTRY = re.compile(
+    r"^\s*(?P<name>x|c) scaling vector\[\s*\d+\s*\]=\s*(?P<val>[-+\d\.eE]+)\s*$"
+)
+_RE_RESTORATION = re.compile(
+    r"Restoration phase is called at iteration\s+(?P<iter>\d+)"
+)
+_RE_OBJ_LINE = re.compile(
+    r"^Objective\.+:\s+(?P<scaled>[-+\d\.eE]+)\s+(?P<unscaled>[-+\d\.eE]+)"
+)
+_RE_NLP_ERR_LINE = re.compile(
+    r"^Overall NLP error\.+:\s+(?P<scaled>[-+\d\.eE]+)\s+(?P<unscaled>[-+\d\.eE]+)"
+)
+_RE_CONSTR_LINE = re.compile(
+    r"^Constraint violation\.+:\s+(?P<scaled>[-+\d\.eE]+)\s+(?P<unscaled>[-+\d\.eE]+)"
+)
+_RE_EXIT = re.compile(r"^EXIT:\s*(?P<msg>.+?)\s*$")
+
+
+def parse_ipopt_log(path: Path) -> dict:
+    """Parse an IPOPT output_file dump.
+
+    Returns a dict with the following keys (missing values are omitted):
+        x_scaling_count, x_scaling_min, x_scaling_max, x_scaling_median
+        c_scaling_count, c_scaling_min, c_scaling_max, c_scaling_median
+        restoration_count, restoration_iterations (list[int])
+        final_scaled_nlp_error, final_unscaled_nlp_error
+        final_constraint_violation
+        final_scaled_objective, final_unscaled_objective
+        exit_status
+    """
+    if not path.exists():
+        return {}
+
+    x_vals: list[float] = []
+    c_vals: list[float] = []
+    restoration_iters: list[int] = []
+    out: dict = {}
+
+    with path.open() as f:
+        for line in f:
+            m = _RE_SCALING_ENTRY.match(line)
+            if m:
+                val = float(m.group("val"))
+                if m.group("name") == "x":
+                    x_vals.append(val)
+                else:
+                    c_vals.append(val)
+                continue
+
+            m = _RE_RESTORATION.search(line)
+            if m:
+                restoration_iters.append(int(m.group("iter")))
+                continue
+
+            m = _RE_OBJ_LINE.match(line)
+            if m:
+                out["final_scaled_objective"] = float(m.group("scaled"))
+                out["final_unscaled_objective"] = float(m.group("unscaled"))
+                continue
+
+            m = _RE_NLP_ERR_LINE.match(line)
+            if m:
+                out["final_scaled_nlp_error"] = float(m.group("scaled"))
+                out["final_unscaled_nlp_error"] = float(m.group("unscaled"))
+                continue
+
+            m = _RE_CONSTR_LINE.match(line)
+            if m:
+                out["final_constraint_violation"] = float(m.group("unscaled"))
+                continue
+
+            m = _RE_EXIT.match(line)
+            if m:
+                out["exit_status"] = m.group("msg")
+                continue
+
+    if x_vals:
+        arr = np.array(x_vals)
+        out["x_scaling_count"] = len(arr)
+        out["x_scaling_min"] = float(arr.min())
+        out["x_scaling_max"] = float(arr.max())
+        out["x_scaling_median"] = float(np.median(arr))
+
+    if c_vals:
+        arr = np.array(c_vals)
+        out["c_scaling_count"] = len(arr)
+        out["c_scaling_min"] = float(arr.min())
+        out["c_scaling_max"] = float(arr.max())
+        out["c_scaling_median"] = float(np.median(arr))
+
+    out["restoration_count"] = len(restoration_iters)
+    out["restoration_iterations"] = restoration_iters
+
+    return out
+
+
 def main() -> int:
     raise NotImplementedError("filled in by Task 7")
 
