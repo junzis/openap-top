@@ -227,6 +227,57 @@ def parse_ipopt_log(path: Path) -> dict:
     return out
 
 
+# ============================================================
+# Student objective wrapper (see spec §"Configs to compare")
+# ============================================================
+
+
+def make_student_objective(optimizer, interpolant, coef: float, rescale: float = 1.0):
+    """Build the student's blended contrail+CO2 objective.
+
+    Form: ``(grid_cost * coef + fuel_cost * (1 - coef)) / rescale``
+    with ``n_dim=4, time_dependent=True``.
+
+    Args:
+        optimizer: A top.Cruise / top.CompleteFlight instance. Must have
+            ``obj_grid_cost`` and ``obj_fuel`` methods.
+        interpolant: CasADi interpolant returned by
+            ``top.tools.interpolant_from_dataframe``.
+        coef: Blend coefficient in [0, 1]. ``coef=0`` is pure fuel,
+            ``coef=1`` is pure grid cost.
+        rescale: Divisor applied to the whole blended objective. Used by
+            the ``obj_rescaled`` config to normalize so ``f(x0) ≈ 1``.
+
+    Returns:
+        A callable ``(x, u, dt, **kwargs) -> expr`` suitable for
+        ``optimizer.trajectory(objective=...)``.
+    """
+
+    def objective(x, u, dt, **kwargs):
+        kw = {
+            k: v for k, v in kwargs.items() if k not in ("time_dependent", "n_dim")
+        }
+        grid_cost = optimizer.obj_grid_cost(
+            x, u, dt, interpolant=interpolant, time_dependent=True, n_dim=4, **kw
+        )
+        fuel_cost = optimizer.obj_fuel(x, u, dt, **kw)
+        return (grid_cost * coef + fuel_cost * (1 - coef)) / rescale
+
+    return objective
+
+
+def evaluate_blended_on_trajectory(df_traj: pd.DataFrame, coef: float) -> float:
+    """Evaluate the student's blend numerically on a returned trajectory.
+
+    Uses the ``grid_cost`` and ``fuel_cost`` columns that ``to_trajectory``
+    writes post-solve. Matches the symbolic objective to 4-5 decimal
+    places in practice.
+    """
+    grid_sum = float(df_traj["grid_cost"].sum())
+    fuel_sum = float(df_traj["fuel_cost"].sum())
+    return grid_sum * coef + fuel_sum * (1 - coef)
+
+
 def main() -> int:
     raise NotImplementedError("filled in by Task 7")
 
