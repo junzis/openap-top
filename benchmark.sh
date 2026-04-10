@@ -16,11 +16,11 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO_ROOT"
 
 if [ $# -eq 0 ]; then
-    .venv/bin/python tests/benchmark.py
+    uv run tests/benchmark.py
 else
     for v in "$@"; do
         echo
         echo "=== Benchmarking openap-top ${v} ==="
-        .venv/bin/python tests/benchmark.py --version "$v"
+        uv run tests/benchmark.py --version "$v"
     done
 fi
