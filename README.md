@@ -1,6 +1,6 @@
 # OpenAP Trajectory Optimizer
 
-> **v2.0 — major rewrite.** The NLP construction has moved to CasADi's Opti stack, eliminating ~400 lines of boilerplate and enabling several bug fixes and cleanups. Fuel-optimal results are bit-identical to v1.11.0. A few APIs have changed — see [What's New in 2.0](#whats-new-in-20) below.
+> In **v2.0**, the NLP construction has moved to CasADi's Opti stack, eliminating ~400 lines of boilerplate and enabling several bug fixes and cleanups. A few APIs have changed, see [What's New in 2.0](#whats-new-in-20) below.
 
 Flight trajectory optimizer based on the [OpenAP](https://github.com/junzis/openap) aircraft performance model.
 
@@ -159,8 +159,8 @@ optimizer.objective_value # final objective value (float)
 Run benchmarks across versions to verify performance:
 
 ```sh
-./benchmark.sh              # Benchmark HEAD (local dev code)
-./benchmark.sh 2.0.0        # Benchmark a specific PyPI release
+./benchmark.sh                 # Benchmark HEAD (local dev code)
+./benchmark.sh v2.0.0          # Benchmark a specific PyPI release
 ./benchmark.sh v1.11.0 v2.0.0  # Benchmark multiple versions sequentially
 ```
 
@@ -172,10 +172,10 @@ Version 2.0 is a major refactor built on CasADi's Opti stack. Most user code nee
 
 | v1.x | v2.0 |
 |---|---|
-| `optimizer.change_engine("CFM56-5B4")` | `top.Cruise(..., engine="CFM56-5B4")` |
+| `optimizer.change_engine()` function dropped | `top.Cruise(..., engine="CFM56-5B4")` |
 | `optimizer.solution["f"]` | `optimizer.objective_value` |
 | `optimizer.solver` was a `ca.nlpsol` callable | Now a `ca.OptiSol` object |
-| `setup(max_iteration=..., max_iterations=...)` | `setup(max_iter=...)` |
+| `setup(max_iteration=...)` | `setup(max_iter=...)`, consistent with CasADi |
 
 See the [changelog](https://github.com/junzis/openap-top/releases) for details.
 

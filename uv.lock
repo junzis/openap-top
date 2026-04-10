@@ -16,7 +16,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-03-25T20:52:49.932688553Z"
+exclude-newer = "2026-04-03T08:43:21.629261905Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -1970,7 +1970,7 @@ wheels = [
 
 [[package]]
 name = "openap-top"
-version = "1.11.0"
+version = "2.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "cartopy", version = "0.23.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
