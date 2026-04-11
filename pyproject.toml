@@ -22,9 +22,14 @@ dependencies = [
     "scikit-learn>=1.4.0",
     "cartopy>=0.23.0",
     "xarray>=2024.0",
+    "click>=8.0",
+    "pyarrow>=15.0",
     # "cfgrib>=0.9.9",
     # "ecmwflibs>=0.6",
 ]
+
+[project.scripts]
+opentop = "opentop_entry:main"
 
 [project.urls]
 homepage = "https://openap.dev"
