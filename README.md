@@ -144,29 +144,29 @@ def my_objective(x, u, dt, **kwargs):
 flight = optimizer.trajectory(objective=my_objective)
 ```
 
-### Improving convergence on hard blended objectives
+### Precomputed grid caches (recommended for contrail + CO₂)
 
-IPOPT's termination tolerances assume an objective of magnitude O(1). On non-convex blended objectives (contrail + CO₂ being the canonical case), the total cost can span several orders of magnitude, and the solver may hit `max_iter` without converging or drift to a worse local optimum.
-
-The opt-in `auto_rescale_objective=True` kwarg evaluates the objective at the initial guess, divides the symbolic objective by `max(|f(x0)|, 1.0)`, and restores physical units in `objective_value` post-solve. Mathematically this is a no-op on the optimal `x`, but it re-calibrates IPOPT's tolerance semantics.
+Linear interpolation over a 4D contrail-cost grid has discontinuous derivatives at every grid cell boundary, which can cause IPOPT's line search to oscillate on non-convex blended objectives. The fix is to use a cubic B-spline interpolant, which has continuous derivatives. But building a bspline over a large grid can take several minutes, so we expose a cache utility:
 
 ```python
-optimizer = opentop.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
-warmstart = optimizer.trajectory(objective="fuel")
+from opentop.tools import cached_interpolant_from_dataframe
 
-flight = optimizer.trajectory(
-    objective=contrail_co2_blend,
-    interpolant=interpolant,
-    initial_guess=warmstart,
-    n_dim=4,
-    time_dependent=True,
-    auto_rescale_objective=True,   # rescue stalled solves on blended objectives
+interpolant = cached_interpolant_from_dataframe(
+    df_cost, "cache/contrail.casadi", shape="bspline"
 )
 ```
 
-On the `EHAM-LGAV` CompleteFlight contrail + CO₂ case, this turns a `max_iter` failure (~300 s wall time) into a ~100-iter success (~15 s) — see `debug/scaling/investigation/` for the full empirical matrix. The recipe is: start from a fuel-only warmstart, then re-solve with the blended objective and `auto_rescale_objective=True`.
+First call builds the bspline and writes it to disk (~1-3 minutes for a 60k-point slice); subsequent calls load the cache in under a second.
 
-Default is `False` — behavior is unchanged unless you opt in.
+If your grid only covers the altitude band where contrails actually form (typically FL200-FL440), extend it with zero-cost levels outside that band before building the interpolant — otherwise `top.CompleteFlight` trajectories that start and end on the ground will query the interpolant outside its data range. The `opentop` CLI has a helper for this:
+
+```sh
+opentop gengrid --in raw_grid.parquet --out grid.casadi \
+    --bbox 35:57,-9:7 --time 2022-02-20T10:00,2022-02-20T14:00 \
+    --pad-altitudes
+```
+
+`--pad-altitudes` is on by default and adds zero-cost rows at altitudes from 0 to FL480 so the interpolant returns 0 (physically correct — no contrails below ~FL200 or above ~FL440) outside the data band.
 
 ## Accessing Solver Results
 
@@ -204,7 +204,6 @@ Version 2.0 is a major refactor. Most user code keeps the same shape, but a few 
 | `optimizer.solver` was a `ca.nlpsol` callable | now a `ca.OptiSol` object |
 | `setup(max_iteration=...)` | `setup(max_iter=...)` |
 | — | new CLI: `opentop optimize ORIGIN DEST ...` and `opentop gengrid ...` |
-| — | new `auto_rescale_objective=True` kwarg on `trajectory()` |
 | — | new `opentop.tools.cached_interpolant_from_dataframe()` for disk-cached bspline interpolants |
 
 The NLP construction moved to CasADi's Opti stack, which removed ~400 lines of boilerplate and cleaned up several bugs. The module rename from `openap.top` to `opentop` eliminates the namespace-extension install mode that used to require `.pth` tricks.

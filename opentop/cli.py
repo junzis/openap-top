@@ -269,8 +269,6 @@ def main() -> None:
               help="Grid cost file (.casadi preferred, .parquet also accepted).")
 @click.option("--max-iter", type=int, default=1500, show_default=True,
               help="Maximum IPOPT iterations.")
-@click.option("--auto-rescale/--no-auto-rescale", default=False, show_default=True,
-              help="Divide the objective by f(x0) for better IPOPT termination.")
 @click.option("-o", "--output", type=click.Path(path_type=Path),
               help="Save trajectory to this parquet file (stdout summary only if omitted).")
 @click.option("-v", "--debug", is_flag=True, help="Verbose IPOPT output.")
@@ -283,7 +281,6 @@ def optimize(
     objective: str,
     grid_path: Path | None,
     max_iter: int,
-    auto_rescale: bool,
     output: Path | None,
     debug: bool,
 ) -> None:
@@ -305,7 +302,6 @@ def optimize(
     click.echo(f"  objective: {objective}")
     click.echo(f"  m0:        {m0}")
     click.echo(f"  max_iter:  {max_iter}")
-    click.echo(f"  auto_rescale_objective: {auto_rescale}")
     if grid_path:
         click.echo(f"  grid file: {grid_path}")
 
@@ -317,7 +313,6 @@ def optimize(
     traj_kwargs: dict = {
         "objective": obj_arg,
         "return_failed": True,
-        "auto_rescale_objective": auto_rescale,
     }
     if interpolant is not None:
         traj_kwargs["interpolant"] = interpolant
