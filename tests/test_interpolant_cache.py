@@ -1,11 +1,11 @@
-"""Tests for the interpolant cache utilities in openap.top.tools."""
+"""Tests for the interpolant cache utilities in opentop.tools."""
 
 import casadi as ca
 import numpy as np
 import pandas as pd
 import pytest
 
-from openap.top import tools
+from opentop import tools
 
 
 def _make_grid(n_lat=5, n_lon=5, n_h=4, n_ts=3) -> pd.DataFrame:

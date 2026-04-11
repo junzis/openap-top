@@ -58,18 +58,23 @@ def _solver_stats(opt):
 
 
 def _import_top():
-    """Import openap.top with fallback for editable/dev installs.
+    """Import the trajectory optimizer module.
 
-    When running HEAD from a local editable install, `from openap import top`
-    fails because openap-top is a namespace sub-package of openap. Extend
-    openap.__path__ to include the local dev directory in that case.
+    Returns the v2+ ``opentop`` top-level package when available, falling
+    back to the v1 ``openap.top`` namespace sub-package for older releases
+    benchmarked via ``uv run --with openap-top==X.Y.Z``.
     """
+    try:
+        import opentop
+        return opentop
+    except ImportError:
+        pass
+    # v1.x fallback: openap.top lives under the openap namespace
     try:
         from openap import top
         return top
     except ImportError:
         import openap
-
         openap.__path__.insert(0, str(REPO_ROOT / "openap"))
         from openap import top
         return top

@@ -20,11 +20,7 @@ sys.path.insert(0, str(project_root))
 import openap
 import openap.casadi as oc
 
-openap_local = project_root / "openap"
-if hasattr(openap, "__path__"):
-    openap.__path__.insert(0, str(openap_local))
-
-from openap import top
+import opentop as top
 
 # --- Configuration ---
 AIRCRAFT = "A320"

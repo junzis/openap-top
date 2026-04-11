@@ -4,7 +4,7 @@ import warnings
 
 import numpy as np
 
-from openap import top
+import opentop as top
 
 # %%
 warnings.filterwarnings("ignore")

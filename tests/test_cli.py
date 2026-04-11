@@ -3,7 +3,7 @@
 import click
 import pytest
 
-from openap.top.cli import parse_objective
+from opentop.cli import parse_objective
 
 
 class TestParseObjective:

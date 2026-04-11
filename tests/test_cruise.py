@@ -2,7 +2,7 @@
 
 import pytest
 
-from openap import top
+import opentop as top
 
 
 class TestCruise:

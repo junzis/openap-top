@@ -1,5 +1,5 @@
 [project]
-name = "openap-top"
+name = "opentop"
 version = "2.0.0"
 description = "Trajectory OPtimizer based on OpenAP model"
 authors = [{ name = "Junzi Sun", email = "git@junzis.com" }]
@@ -29,7 +29,7 @@ dependencies = [
 ]
 
 [project.scripts]
-opentop = "opentop_entry:main"
+opentop = "opentop.cli:main"
 
 [project.urls]
 homepage = "https://openap.dev"
@@ -65,12 +65,9 @@ select = [
 known-first-party = ["numpy", "pandas", "pyproj"]
 
 
-[tool.hatch.metadata]
-allow-namespace-packages = true
-
 [tool.hatch.build.targets.wheel]
 universal = true
-packages = ["openap"]
+packages = ["opentop"]
 
 [build-system]
 requires = ["hatchling"]

@@ -1,10 +1,10 @@
 # OpenAP Trajectory Optimizer
 
-> In **v2.0**, the NLP construction has moved to CasADi's Opti stack, eliminating ~400 lines of boilerplate and enabling several bug fixes and cleanups. A few APIs have changed, see [What's New in 2.0](#whats-new-in-20) below.
+> **v2.0** is a major refactor: (1) the NLP construction has moved to CasADi's Opti stack, (2) the module has been renamed from ``openap.top`` to a standalone ``opentop`` package, and (3) the CLI ``opentop`` is new. See [What's New in 2.0](#whats-new-in-20) below.
 
 Flight trajectory optimizer based on the [OpenAP](https://github.com/junzis/openap) aircraft performance model.
 
-`openap-top` uses non-linear optimal control via direct collocation (CasADi + IPOPT) to generate optimal flight trajectories. It provides simple interfaces for:
+`opentop` uses non-linear optimal control via direct collocation (CasADi + IPOPT) to generate optimal flight trajectories. It provides simple interfaces for:
 
 - Complete flight trajectories (takeoff → cruise → landing)
 - Individual phases: climb, cruise, descent
@@ -22,7 +22,7 @@ Detailed guide and examples: <https://openap.dev/optimize>.
 From PyPI:
 
 ```sh
-pip install --upgrade openap-top
+pip install --upgrade opentop
 ```
 
 From the development branch:
@@ -32,16 +32,16 @@ pip install --upgrade git+https://github.com/junzis/openap
 pip install --upgrade git+https://github.com/junzis/openap-top
 ```
 
-`openap-top` is a namespace extension of `openap` and is imported as `openap.top`.
+`opentop` is a standalone package. Prior to v2.0 it shipped as `openap.top`, a namespace extension of `openap`; v2.0 drops that and installs as a top-level `opentop` package instead.
 
 ## Quick Start
 
 ### A simple optimal flight
 
 ```python
-from openap import top
+import opentop
 
-optimizer = top.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
+optimizer = opentop.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
 flight = optimizer.trajectory(objective="fuel")
 ```
 
@@ -64,7 +64,7 @@ The supported climate metrics are `gwp20`, `gwp50`, `gwp100`, `gtp20`, `gtp50`, 
 ### Choosing a different engine
 
 ```python
-optimizer = top.CompleteFlight(
+optimizer = opentop.CompleteFlight(
     "A320", "EHAM", "LGAV", m0=0.85, engine="CFM56-5B4"
 )
 ```
@@ -72,18 +72,18 @@ optimizer = top.CompleteFlight(
 ### Flight phase optimizers
 
 ```python
-cruise    = top.Cruise("A320", "EHAM", "LGAV", m0=0.85).trajectory()
-climb     = top.Climb("A320", "EHAM", "LGAV", m0=0.85).trajectory()
-descent   = top.Descent("A320", "EHAM", "LGAV", m0=0.85).trajectory()
+cruise    = opentop.Cruise("A320", "EHAM", "LGAV", m0=0.85).trajectory()
+climb     = opentop.Climb("A320", "EHAM", "LGAV", m0=0.85).trajectory()
+descent   = opentop.Descent("A320", "EHAM", "LGAV", m0=0.85).trajectory()
 
 # Multi-phase: optimizes climb, cruise, descent sequentially
-full = top.MultiPhase("A320", "EHAM", "LGAV", m0=0.85).trajectory()
+full = opentop.MultiPhase("A320", "EHAM", "LGAV", m0=0.85).trajectory()
 ```
 
 `Cruise` also supports constant-altitude, constant-Mach, and fixed-track modes:
 
 ```python
-opt = top.Cruise("A320", "EHAM", "LGAV", m0=0.85)
+opt = opentop.Cruise("A320", "EHAM", "LGAV", m0=0.85)
 opt.fix_cruise_altitude()
 opt.fix_mach_number()
 opt.fix_track_angle()
@@ -95,15 +95,15 @@ flight = opt.trajectory()
 Download ERA5 (or similar) meteorological data in GRIB format, then:
 
 ```python
-from openap import top
+import opentop
 
-windfield = top.tools.read_grids("wind.grib")
+windfield = opentop.tools.read_grids("wind.grib")
 
-optimizer = top.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
+optimizer = opentop.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
 optimizer.enable_wind(windfield)
 
 flight = optimizer.trajectory(objective="fuel")
-top.vis.trajectory(flight, windfield=windfield, barb_steps=15)
+opentop.vis.trajectory(flight, windfield=windfield, barb_steps=15)
 ```
 
 ![example_optimal_flight](./docs/_static/optimal_flight_complete_example.png)
@@ -113,7 +113,7 @@ top.vis.trajectory(flight, windfield=windfield, barb_steps=15)
 Build a CasADi interpolant from a DataFrame with columns `longitude`, `latitude`, `height` (m), `cost`, and optionally `ts`:
 
 ```python
-interpolant = top.tools.interpolant_from_dataframe(df_cost)
+interpolant = opentop.tools.interpolant_from_dataframe(df_cost)
 
 def contrail_objective(x, u, dt, **kwargs):
     grid_cost = optimizer.obj_grid_cost(
@@ -151,7 +151,7 @@ IPOPT's termination tolerances assume an objective of magnitude O(1). On non-con
 The opt-in `auto_rescale_objective=True` kwarg evaluates the objective at the initial guess, divides the symbolic objective by `max(|f(x0)|, 1.0)`, and restores physical units in `objective_value` post-solve. Mathematically this is a no-op on the optimal `x`, but it re-calibrates IPOPT's tolerance semantics.
 
 ```python
-optimizer = top.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
+optimizer = opentop.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85)
 warmstart = optimizer.trajectory(objective="fuel")
 
 flight = optimizer.trajectory(
@@ -192,14 +192,22 @@ Reports land in `tests/benchmarks/<version>.txt`.
 
 ## What's New in 2.0
 
-Version 2.0 is a major refactor built on CasADi's Opti stack. Most user code needs no changes, but a few APIs have moved:
+Version 2.0 is a major refactor. Most user code keeps the same shape, but a few things have moved:
 
 | v1.x | v2.0 |
 |---|---|
-| `optimizer.change_engine()` function dropped | `top.Cruise(..., engine="CFM56-5B4")` |
+| `pip install openap-top` | `pip install opentop` |
+| `from openap import top` | `import opentop` |
+| `top.Cruise(...)` | `opentop.Cruise(...)` |
+| `optimizer.change_engine()` dropped | `opentop.Cruise(..., engine="CFM56-5B4")` |
 | `optimizer.solution["f"]` | `optimizer.objective_value` |
-| `optimizer.solver` was a `ca.nlpsol` callable | Now a `ca.OptiSol` object |
-| `setup(max_iteration=...)` | `setup(max_iter=...)`, consistent with CasADi |
+| `optimizer.solver` was a `ca.nlpsol` callable | now a `ca.OptiSol` object |
+| `setup(max_iteration=...)` | `setup(max_iter=...)` |
+| — | new CLI: `opentop optimize ORIGIN DEST ...` and `opentop gengrid ...` |
+| — | new `auto_rescale_objective=True` kwarg on `trajectory()` |
+| — | new `opentop.tools.cached_interpolant_from_dataframe()` for disk-cached bspline interpolants |
+
+The NLP construction moved to CasADi's Opti stack, which removed ~400 lines of boilerplate and cleaned up several bugs. The module rename from `openap.top` to `opentop` eliminates the namespace-extension install mode that used to require `.pth` tricks.
 
 See the [changelog](https://github.com/junzis/openap-top/releases) for details.
 

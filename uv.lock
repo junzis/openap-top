@@ -16,7 +16,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-04-04T09:54:14.503586265Z"
+exclude-newer = "2026-04-04T10:12:39.43979415Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -1969,7 +1969,7 @@ wheels = [
 ]
 
 [[package]]
-name = "openap-top"
+name = "opentop"
 version = "2.0.0"
 source = { editable = "." }
 dependencies = [

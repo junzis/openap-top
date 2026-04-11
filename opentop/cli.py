@@ -1,4 +1,4 @@
-"""Command-line interface for openap-top.
+"""Command-line interface for opentop.
 
 Two subcommands:
 
@@ -19,8 +19,8 @@ from typing import Callable
 import click
 import pandas as pd
 
-from openap import top
-from openap.top import tools
+import opentop as top
+from opentop import tools
 
 # ============================================================
 # Objective parsing
@@ -245,9 +245,9 @@ def _pad_altitudes(df: pd.DataFrame) -> pd.DataFrame:
 
 
 @click.group()
-@click.version_option(package_name="openap-top", prog_name="opentop")
+@click.version_option(package_name="opentop", prog_name="opentop")
 def main() -> None:
-    """openap-top: aircraft trajectory optimization CLI."""
+    """opentop: aircraft trajectory optimization CLI."""
 
 
 @main.command()

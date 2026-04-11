@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from openap import top
+import opentop as top
 
 
 class TestTrajectoryFuelCost:

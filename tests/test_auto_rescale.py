@@ -1,6 +1,6 @@
 """Tests for the auto_rescale_objective option on trajectory()."""
 
-from openap import top
+import opentop as top
 
 
 class TestAutoRescale:
