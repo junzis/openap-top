@@ -636,14 +636,18 @@ class Base:
             **kwargs: Additional arguments including:
                 - interpolant: Grid cost interpolant function
                 - time_dependent: Whether grid cost is time dependent (default True)
-                - n_dim: Dimension of grid cost, 3 or 4 (default 4)
+                - n_dim: Dimension of grid cost, 3 or 4 (auto-detected from
+                  interpolant if not provided)
 
         Returns:
             pd.DataFrame: Trajectory with columns including fuel_cost and grid_cost
         """
         interpolant = kwargs.get("interpolant", None)
         time_dependent = kwargs.get("time_dependent", True)
-        n_dim = kwargs.get("n_dim", 4)
+        n_dim = kwargs.get("n_dim")
+        if n_dim is None:
+            n_dim = interpolant.size1_in(0) if interpolant is not None else 3
+        assert n_dim in [3, 4], f"n_dim must be 3 or 4, got {n_dim}"
 
         X = x_opt if isinstance(x_opt, np.ndarray) else x_opt.full()
         U = u_opt if isinstance(u_opt, np.ndarray) else u_opt.full()
