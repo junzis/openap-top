@@ -1,6 +1,12 @@
 # opentop: Open Trajectory Optimizer
 
-`opentop` is **v2 of [`openap-top`](https://pypi.org/project/openap-top/)**. The package has been renamed and restructured: what used to be installed as `openap-top` and imported as `openap.top` now installs as `opentop` and imports as `import opentop`. See [What's New in 2.0](#whats-new-in-20) below for the full migration table.
+`opentop` is **v2 of [`openap-top`](https://pypi.org/project/openap-top/)**. The package has been renamed and restructured: what used to be installed as `openap-top` and imported as `openap.top` now installs as `opentop` and imports as `import opentop`. The three headline changes in v2.0:
+
+- **New Opti-stack backend** — NLP construction has moved to CasADi's Opti stack, removing ~400 lines of boilerplate and fixing several long-standing bugs.
+- **Standalone package** — `opentop` is no longer a namespace extension of `openap`; it installs as a top-level package and imports as `import opentop`.
+- **Command-line interface** — `opentop optimize` and `opentop gengrid` expose the optimizer and grid-cache builder from the shell.
+
+See [What's New in 2.0](#whats-new-in-20) below for the full migration table.
 
 Flight trajectory optimizer based on the [OpenAP](https://github.com/junzis/openap) aircraft performance model.
 
