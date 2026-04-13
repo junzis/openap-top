@@ -14,7 +14,7 @@ classifiers = [
     "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
     "Programming Language :: Python :: 3",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
     "openap>=2.4",
     "casadi>=3.6",
