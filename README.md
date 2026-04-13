@@ -168,6 +168,58 @@ opentop gengrid --in raw_grid.parquet --out grid.casadi \
 
 `--pad-altitudes` is on by default and adds zero-cost rows at altitudes from 0 to FL480 so the interpolant returns 0 (physically correct — no contrails below ~FL200 or above ~FL440) outside the data band.
 
+## Command-line interface
+
+Installing `opentop` also installs the `opentop` executable, which exposes two subcommands: `optimize` (run a trajectory optimization) and `gengrid` (precompute a grid-cost interpolant).
+
+### `opentop optimize`
+
+Run a trajectory optimization without writing any Python:
+
+```sh
+opentop optimize EHAM EDDF -a A320 --phase cruise --obj fuel
+```
+
+A concise solver summary (status, iterations, objective, fuel burn, max altitude, flight time) is printed to stdout. Pass `-o flight.parquet` to also save the full trajectory DataFrame.
+
+Supported objectives: `fuel`, `time`, `ci:N` (cost index, any integer), `gwp20`/`gwp50`/`gwp100`, `gtp20`/`gtp50`/`gtp100`, and `grid` (requires `--grid FILE`).
+
+Blended objectives are written as a weighted sum:
+
+```sh
+opentop optimize EHAM EDDF -a A320 --phase all \
+    --obj "0.3*fuel+0.7*grid" \
+    --grid contrail.casadi
+```
+
+Common flags:
+
+| flag | purpose |
+|---|---|
+| `-a`, `--aircraft` | aircraft type (required), e.g. `A320` |
+| `--phase` | `all` (CompleteFlight, default), `cruise`, `climb`, `descent` |
+| `--obj` | objective expression — single term or weighted sum |
+| `--m0` | initial mass as a fraction of MTOW (default `0.85`) |
+| `--grid` | cost-grid file; `.casadi` cache preferred, `.parquet` accepted with a slow-path warning |
+| `--max-iter` | IPOPT iteration cap (default `1500`) |
+| `-o`, `--output` | write the trajectory DataFrame to a parquet file |
+| `-v`, `--debug` | verbose IPOPT output |
+
+### `opentop gengrid`
+
+Build and cache a CasADi interpolant from a raw cost grid:
+
+```sh
+opentop gengrid --in raw_grid.parquet --out contrail.casadi \
+    --bbox 35:57,-9:7 \
+    --time 2022-02-20T10:00,2022-02-20T14:00 \
+    --shape bspline
+```
+
+The resulting `.casadi` file loads in under a second (vs. minutes to rebuild a bspline from raw grid data), so keep it on disk and pass it to `opentop optimize --grid`.
+
+Use `opentop --help`, `opentop optimize --help`, and `opentop gengrid --help` for the full option list.
+
 ## Accessing Solver Results
 
 After calling `.trajectory()`, the optimizer exposes:
