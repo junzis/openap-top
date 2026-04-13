@@ -14,7 +14,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-04-06T21:18:58.642964066Z"
+exclude-newer = "2026-04-06T22:35:38.676148275Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -941,24 +941,24 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cartopy", specifier = ">=0.23.0" },
-    { name = "casadi", specifier = ">=3.6" },
-    { name = "click", specifier = ">=8.0" },
-    { name = "openap", specifier = ">=2.4" },
-    { name = "pyarrow", specifier = ">=15.0" },
-    { name = "pyproj", specifier = ">=3.4" },
-    { name = "scikit-learn", specifier = ">=1.4.0" },
-    { name = "xarray", specifier = ">=2024.0" },
+    { name = "cartopy", specifier = ">=0.25" },
+    { name = "casadi", specifier = ">=3.7" },
+    { name = "click", specifier = ">=8.3" },
+    { name = "openap", specifier = ">=2.5" },
+    { name = "pyarrow", specifier = ">=23.0" },
+    { name = "pyproj", specifier = ">=3.7" },
+    { name = "scikit-learn", specifier = ">=1.8" },
+    { name = "xarray", specifier = ">=2026.2" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "black", specifier = ">=22.12.0" },
-    { name = "flake8", specifier = ">=5.0.0" },
-    { name = "ipykernel", specifier = ">=6.29.5" },
-    { name = "isort", specifier = ">=5.11.4" },
-    { name = "pytest", specifier = ">=7.2.0" },
-    { name = "pytest-xdist", specifier = ">=3.5.0" },
+    { name = "black", specifier = ">=26.3" },
+    { name = "flake8", specifier = ">=7.3" },
+    { name = "ipykernel", specifier = ">=7.2" },
+    { name = "isort", specifier = ">=8.0" },
+    { name = "pytest", specifier = ">=9.0" },
+    { name = "pytest-xdist", specifier = ">=3.8" },
 ]
 
 [[package]]

@@ -16,14 +16,14 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "openap>=2.4",
-    "casadi>=3.6",
-    "pyproj>=3.4",
-    "scikit-learn>=1.4.0",
-    "cartopy>=0.23.0",
-    "xarray>=2024.0",
-    "click>=8.0",
-    "pyarrow>=15.0",
+    "openap>=2.5",
+    "casadi>=3.7",
+    "pyproj>=3.7",
+    "scikit-learn>=1.8",
+    "cartopy>=0.25",
+    "xarray>=2026.2",
+    "click>=8.3",
+    "pyarrow>=23.0",
     # "cfgrib>=0.9.9",
     # "ecmwflibs>=0.6",
 ]
@@ -38,13 +38,13 @@ issues = "https://github.com/junzis/opentop/issues"
 
 [dependency-groups]
 dev = [
-    "flake8>=5.0.0",
-    "black>=22.12.0",
-    "isort>=5.11.4",
-    "ipykernel>=6.29.5",
+    "flake8>=7.3",
+    "black>=26.3",
+    "isort>=8.0",
+    "ipykernel>=7.2",
     # "mypy>=0.991",
-    "pytest>=7.2.0",
-    "pytest-xdist>=3.5.0",
+    "pytest>=9.0",
+    "pytest-xdist>=3.8",
 ]
 
 [tool.ruff]
