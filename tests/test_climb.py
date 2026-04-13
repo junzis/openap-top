@@ -5,127 +5,73 @@ import pytest
 import opentop as top
 
 
+@pytest.fixture(scope="module")
+def climb_optimizer(aircraft_type, medium_flight):
+    return top.Climb(
+        aircraft_type,
+        medium_flight["origin"],
+        medium_flight["destination"],
+        medium_flight["m0"],
+    )
+
+
+@pytest.fixture(scope="module")
+def climb_clipped_df(climb_optimizer):
+    return climb_optimizer.trajectory(objective="fuel")
+
+
+@pytest.fixture(scope="module")
+def climb_full_df(climb_optimizer):
+    return climb_optimizer.trajectory(objective="fuel", remove_cruise=False)
+
+
+@pytest.fixture(scope="module")
+def climb_alt_stop_df(climb_optimizer):
+    return climb_optimizer.trajectory(
+        objective="fuel", alt_stop=30000, remove_cruise=False
+    )
+
+
+@pytest.fixture(scope="module")
+def climb_alt_stop_low_df(climb_optimizer):
+    return climb_optimizer.trajectory(
+        objective="fuel", alt_stop=25000, remove_cruise=False
+    )
+
+
 class TestClimb:
-    """Tests for the Climb optimizer."""
-
-    def test_climb_default(self, aircraft_type, medium_flight):
-        """Climb should produce a valid trajectory with default settings."""
-        optimizer = top.Climb(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df = optimizer.trajectory(objective="fuel")
-
+    def test_valid_trajectory(self, climb_clipped_df):
+        df = climb_clipped_df
         assert df is not None
         assert len(df) > 0
-        assert "altitude" in df.columns
-        assert "heading" in df.columns
-        assert "vertical_rate" in df.columns
+        for col in ("altitude", "heading", "vertical_rate"):
+            assert col in df.columns
 
-    def test_climb_altitude_increases(self, aircraft_type, medium_flight):
-        """Climb trajectory altitude should generally increase."""
-        optimizer = top.Climb(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df = optimizer.trajectory(objective="fuel")
+    def test_altitude_increases(self, climb_clipped_df):
+        assert climb_clipped_df.altitude.iloc[-1] > climb_clipped_df.altitude.iloc[0]
 
-        assert df.altitude.iloc[-1] > df.altitude.iloc[0]
+    def test_remove_cruise_clips(self, climb_clipped_df, climb_full_df):
+        assert len(climb_clipped_df) <= len(climb_full_df)
+        assert (climb_clipped_df.vertical_rate > 100).all()
 
-    def test_climb_remove_cruise_default(self, aircraft_type, medium_flight):
-        """Default remove_cruise=True should clip cruise segment."""
-        optimizer = top.Climb(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df_clipped = optimizer.trajectory(objective="fuel")
-        df_full = optimizer.trajectory(objective="fuel", remove_cruise=False)
+    def test_remove_cruise_false_includes_cruise(self, climb_full_df):
+        assert (climb_full_df.vertical_rate.abs() < 100).any()
 
-        assert len(df_clipped) <= len(df_full)
-        assert (df_clipped.vertical_rate > 100).all()
+    def test_alt_stop(self, climb_alt_stop_df):
+        assert abs(climb_alt_stop_df.altitude.max() - 30000) < 500
 
-    def test_climb_remove_cruise_false(self, aircraft_type, medium_flight):
-        """remove_cruise=False should include cruise segment."""
-        optimizer = top.Climb(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df = optimizer.trajectory(objective="fuel", remove_cruise=False)
+    def test_alt_stop_vs_default(self, climb_full_df, climb_alt_stop_low_df):
+        assert climb_alt_stop_low_df.altitude.max() < climb_full_df.altitude.max()
 
-        # Full trajectory should have points with near-zero vertical rate
-        assert (df.vertical_rate.abs() < 100).any()
+    def test_heading_reasonable(self, climb_clipped_df):
+        df = climb_clipped_df
+        assert df.heading.max() - df.heading.min() < 30
 
-    def test_climb_alt_stop(self, aircraft_type, medium_flight):
-        """alt_stop should control the top of climb altitude."""
-        optimizer = top.Climb(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df = optimizer.trajectory(
-            objective="fuel", alt_stop=30000, remove_cruise=False
-        )
-
-        assert abs(df.altitude.max() - 30000) < 500
-
-    def test_climb_alt_stop_vs_default(self, aircraft_type, medium_flight):
-        """alt_stop should produce different altitude than default."""
-        optimizer = top.Climb(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df_default = optimizer.trajectory(objective="fuel", remove_cruise=False)
-        df_low = optimizer.trajectory(
-            objective="fuel", alt_stop=25000, remove_cruise=False
-        )
-
-        assert df_low.altitude.max() < df_default.altitude.max()
-
-    def test_climb_heading_reasonable(self, aircraft_type, medium_flight):
-        """Heading should stay within a reasonable range."""
-        optimizer = top.Climb(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df = optimizer.trajectory(objective="fuel")
-
-        heading_range = df.heading.max() - df.heading.min()
-        assert heading_range < 30
-
-    def test_climb_mass_decreases(self, aircraft_type, medium_flight):
-        """Mass should decrease during climb (fuel burned)."""
-        optimizer = top.Climb(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df = optimizer.trajectory(objective="fuel")
-
+    def test_mass_decreases(self, climb_clipped_df):
+        df = climb_clipped_df
         assert df.mass.iloc[-1] < df.mass.iloc[0]
 
-    def test_climb_fuel_cost_column(self, aircraft_type, medium_flight):
-        """Climb trajectory should include fuel_cost column."""
-        optimizer = top.Climb(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df = optimizer.trajectory(objective="fuel")
-
+    def test_fuel_cost_column(self, climb_clipped_df):
+        df = climb_clipped_df
         assert "fuel_cost" in df.columns
         assert (df["fuel_cost"] >= 0).all()

@@ -5,112 +5,63 @@ import pytest
 import opentop as top
 
 
+@pytest.fixture(scope="module")
+def descent_optimizer(aircraft_type, medium_flight):
+    return top.Descent(
+        aircraft_type,
+        medium_flight["origin"],
+        medium_flight["destination"],
+        medium_flight["m0"],
+    )
+
+
+@pytest.fixture(scope="module")
+def descent_clipped_df(descent_optimizer):
+    return descent_optimizer.trajectory(objective="fuel")
+
+
+@pytest.fixture(scope="module")
+def descent_full_df(descent_optimizer):
+    return descent_optimizer.trajectory(objective="fuel", remove_cruise=False)
+
+
+@pytest.fixture(scope="module")
+def descent_alt_start_df(descent_optimizer):
+    return descent_optimizer.trajectory(
+        objective="fuel", alt_start=30000, remove_cruise=False
+    )
+
+
 class TestDescent:
-    """Tests for the Descent optimizer."""
-
-    def test_descent_default(self, aircraft_type, medium_flight):
-        """Descent should produce a valid trajectory with default settings."""
-        optimizer = top.Descent(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df = optimizer.trajectory(objective="fuel")
-
+    def test_valid_trajectory(self, descent_clipped_df):
+        df = descent_clipped_df
         assert df is not None
         assert len(df) > 0
-        assert "altitude" in df.columns
-        assert "heading" in df.columns
-        assert "vertical_rate" in df.columns
+        for col in ("altitude", "heading", "vertical_rate"):
+            assert col in df.columns
 
-    def test_descent_remove_cruise_default(self, aircraft_type, medium_flight):
-        """Default remove_cruise=True should clip cruise segment."""
-        optimizer = top.Descent(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df_clipped = optimizer.trajectory(objective="fuel")
-        df_full = optimizer.trajectory(objective="fuel", remove_cruise=False)
+    def test_remove_cruise_clips(self, descent_clipped_df, descent_full_df):
+        assert len(descent_clipped_df) <= len(descent_full_df)
+        assert (descent_clipped_df.vertical_rate < -100).all()
 
-        assert len(df_clipped) <= len(df_full)
-        assert (df_clipped.vertical_rate < -100).all()
+    def test_remove_cruise_false_includes_cruise(self, descent_full_df):
+        assert (descent_full_df.vertical_rate.abs() < 100).any()
 
-    def test_descent_remove_cruise_false(self, aircraft_type, medium_flight):
-        """remove_cruise=False should include cruise segment."""
-        optimizer = top.Descent(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df = optimizer.trajectory(objective="fuel", remove_cruise=False)
+    def test_ends_low(self, descent_full_df):
+        assert descent_full_df.altitude.iloc[-1] < 1000
 
-        # Full trajectory should have points with near-zero vertical rate
-        assert (df.vertical_rate.abs() < 100).any()
+    def test_alt_start(self, descent_alt_start_df):
+        assert abs(descent_alt_start_df.altitude.iloc[0] - 30000) < 500
 
-    def test_descent_altitude_decreases_at_end(self, aircraft_type, medium_flight):
-        """Descent trajectory should end at low altitude."""
-        optimizer = top.Descent(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df = optimizer.trajectory(objective="fuel", remove_cruise=False)
+    def test_heading_reasonable(self, descent_full_df):
+        df = descent_full_df
+        assert df.heading.max() - df.heading.min() < 30
 
-        assert df.altitude.iloc[-1] < 1000
-
-    def test_descent_alt_start(self, aircraft_type, medium_flight):
-        """alt_start should control the start altitude."""
-        optimizer = top.Descent(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df = optimizer.trajectory(
-            objective="fuel", alt_start=30000, remove_cruise=False
-        )
-
-        assert abs(df.altitude.iloc[0] - 30000) < 500
-
-    def test_descent_heading_reasonable(self, aircraft_type, medium_flight):
-        """Heading should stay within a reasonable range."""
-        optimizer = top.Descent(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df = optimizer.trajectory(objective="fuel", remove_cruise=False)
-
-        heading_range = df.heading.max() - df.heading.min()
-        assert heading_range < 30
-
-    def test_descent_mass_decreases(self, aircraft_type, medium_flight):
-        """Mass should decrease during descent (fuel burned)."""
-        optimizer = top.Descent(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df = optimizer.trajectory(objective="fuel", remove_cruise=False)
-
+    def test_mass_decreases(self, descent_full_df):
+        df = descent_full_df
         assert df.mass.iloc[-1] < df.mass.iloc[0]
 
-    def test_descent_fuel_cost_column(self, aircraft_type, medium_flight):
-        """Descent trajectory should include fuel_cost column."""
-        optimizer = top.Descent(
-            aircraft_type,
-            medium_flight["origin"],
-            medium_flight["destination"],
-            medium_flight["m0"],
-        )
-        df = optimizer.trajectory(objective="fuel", remove_cruise=False)
-
+    def test_fuel_cost_column(self, descent_full_df):
+        df = descent_full_df
         assert "fuel_cost" in df.columns
         assert (df["fuel_cost"] >= 0).all()
