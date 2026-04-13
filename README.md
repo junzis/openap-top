@@ -158,7 +158,7 @@ interpolant = cached_interpolant_from_dataframe(
 
 First call builds the bspline and writes it to disk (~1-3 minutes for a 60k-point slice); subsequent calls load the cache in under a second.
 
-If your grid only covers the altitude band where contrails actually form (typically FL200-FL440), extend it with zero-cost levels outside that band before building the interpolant — otherwise `top.CompleteFlight` trajectories that start and end on the ground will query the interpolant outside its data range. The `opentop` CLI has a helper for this:
+If your grid only covers the altitude band where contrails actually form (typically FL200-FL440), extend it with zero-cost levels outside that band before building the interpolant — otherwise `opentop.CompleteFlight` trajectories that start and end on the ground will query the interpolant outside its data range. The `opentop` CLI has a helper for this:
 
 ```sh
 opentop gengrid --in raw_grid.parquet --out grid.casadi \
