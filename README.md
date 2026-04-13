@@ -1,6 +1,6 @@
-# OpenAP Trajectory Optimizer
+# opentop: Open Trajectory Optimizer
 
-> **v2.0** is a major refactor: (1) the NLP construction has moved to CasADi's Opti stack, (2) the module has been renamed from ``openap.top`` to a standalone ``opentop`` package, and (3) the CLI ``opentop`` is new. See [What's New in 2.0](#whats-new-in-20) below.
+`opentop` is **v2 of [`openap-top`](https://pypi.org/project/openap-top/)**. The package has been renamed and restructured: what used to be installed as `openap-top` and imported as `openap.top` now installs as `opentop` and imports as `import opentop`. See [What's New in 2.0](#whats-new-in-20) below for the full migration table.
 
 Flight trajectory optimizer based on the [OpenAP](https://github.com/junzis/openap) aircraft performance model.
 
