@@ -35,7 +35,7 @@ From the development branch:
 
 ```sh
 pip install --upgrade git+https://github.com/junzis/openap
-pip install --upgrade git+https://github.com/junzis/openap-top
+pip install --upgrade git+https://github.com/junzis/opentop
 ```
 
 `opentop` is a standalone package. Prior to v2.0 it shipped as `openap.top`, a namespace extension of `openap`; v2.0 drops that and installs as a top-level `opentop` package instead.
@@ -266,7 +266,7 @@ Version 2.0 is a major refactor. Most user code keeps the same shape, but a few 
 
 The NLP construction moved to CasADi's Opti stack, which removed ~400 lines of boilerplate and cleaned up several bugs. The module rename from `openap.top` to `opentop` eliminates the namespace-extension install mode that used to require `.pth` tricks.
 
-See the [changelog](https://github.com/junzis/openap-top/releases) for details.
+See the [changelog](https://github.com/junzis/opentop/releases) for details.
 
 ## License
 

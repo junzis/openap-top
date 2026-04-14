@@ -435,9 +435,12 @@ def run_with_uv(version):
         Results dict parsed from the subprocess JSON output.
     """
     pypi_version = version.lstrip("v")
+    # v1.x shipped as the PyPI package `openap-top` (imported as openap.top);
+    # v2.0.0+ ships as the top-level `opentop` package.
+    pypi_name = "opentop" if int(pypi_version.split(".")[0]) >= 2 else "openap-top"
     cmd = [
         "uv", "run", "--no-project",
-        "--with", f"openap-top=={pypi_version}",
+        "--with", f"{pypi_name}=={pypi_version}",
         "python", str(Path(__file__).resolve()), "--run-only",
     ]
     result = subprocess.run(
