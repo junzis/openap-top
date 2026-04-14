@@ -457,6 +457,26 @@ class Base:
             # Continuity constraint
             self._opti.subject_to(Xk_end == Xk)
 
+        # Optional: rescale the objective by its value at the initial guess
+        # so IPOPT sees f(x0) ≈ 1. Important for objectives whose natural
+        # magnitude is far from O(1) — for example climate-metric objectives
+        # combining contrail ATR20 (~1e-12 K/s) and CO2 (~7e-15 K/kg·s),
+        # where IPOPT's default termination tolerances would otherwise be
+        # satisfied at any feasible point. The physical objective_value is
+        # multiplied back in _solve so callers see the unscaled number.
+        self._objective_rescale = 1.0
+        if kwargs.get("auto_rescale_objective", False):
+            x_init = self._opti.debug.value(self._opti.x, self._opti.initial())
+            j_at_init = ca.Function("j_at_init", [self._opti.x], [J])
+            f0 = float(j_at_init(x_init))
+            # Only skip rescaling if f0 is essentially zero to avoid
+            # divide-by-zero. Otherwise rescale by abs(f0) in either
+            # direction — crucial for climate-metric objectives where
+            # the natural magnitude is far below 1.
+            if abs(f0) > 1e-30:
+                self._objective_rescale = abs(f0)
+                J = J / self._objective_rescale
+
         self._opti.minimize(J)
 
         return X, U
@@ -482,7 +502,8 @@ class Base:
             sol = self._opti.debug
 
         self.solver = sol
-        self.objective_value = float(sol.value(self._opti.f))
+        # Undo auto_rescale_objective so callers always see the physical value.
+        self.objective_value = float(sol.value(self._opti.f)) * self._objective_rescale
 
         ts_final_val = float(sol.value(self.ts_final))
         x_opt = sol.value(ca.horzcat(*X))
