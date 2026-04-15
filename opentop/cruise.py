@@ -82,7 +82,8 @@ class Cruise(Base):
         self.u_ub = [self.mach_max, 500 * fpm, psi + pi / 2]
 
         # Initial guess - states
-        self.x_guess = self.initial_guess()
+        initial_guess = kwargs.get("initial_guess", None)
+        self.x_guess = self.initial_guess(initial_guess) if initial_guess is not None else self.initial_guess()
 
         # Initial guess - controls
         self.u_guess = [0.7, 0, psi]
@@ -101,10 +102,6 @@ class Cruise(Base):
             pd.DataFrame: Optimized trajectory.
         """
         self.init_conditions(**kwargs)
-
-        initial_guess = kwargs.get("initial_guess", None)
-        if initial_guess is not None:
-            self.x_guess = self.initial_guess(initial_guess)
 
         customized_max_fuel = kwargs.get("max_fuel", None)
         return_failed = kwargs.get("return_failed", False)
