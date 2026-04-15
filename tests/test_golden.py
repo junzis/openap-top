@@ -23,13 +23,19 @@ def test_complete_flight_golden_objective_within_1pct():
     df = opt.trajectory(objective=record["objective_spec"])
 
     assert df is not None
-    assert opt.solver.stats()["success"]
 
     obj_now = float(opt.objective_value)
     baseline = record["objective"]
     drift = abs(obj_now - baseline) / baseline
+
+    # Check drift first, so a cap-hit doesn't mask a numerical regression.
     assert drift < TOLERANCE, (
         f"golden-smoke drift {drift * 100:.3f}% > {TOLERANCE * 100:.1f}%: "
         f"baseline={baseline} now={obj_now} "
+        f"success={opt.solver.stats()['success']} iters={opt.solver.stats()['iter_count']} "
         f"(baseline recorded at {record['commit_sha']})"
+    )
+    # Then sanity-check the solver did converge (< max_iter cap).
+    assert opt.solver.stats()["success"], (
+        f"solver failed: {opt.solver.stats()}"
     )
