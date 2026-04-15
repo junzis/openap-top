@@ -12,7 +12,7 @@ import pandas as pd
 
 try:
     from . import tools
-except Exception:
+except ImportError:
     warnings.warn("cfgrib and sklearn are required for wind integration")
 
 
