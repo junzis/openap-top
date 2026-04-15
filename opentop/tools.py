@@ -152,7 +152,7 @@ def construct_interpolant(
 
 
 def interpolant_from_dataframe(
-    df: pd.DataFrame, shape: str = "linear"
+    df: pd.DataFrame, shape: str = "bspline"
 ) -> ca.interpolant:
     """Construct a CasADi interpolant from a DataFrame.
 
@@ -161,7 +161,11 @@ def interpolant_from_dataframe(
 
     Args:
         df: Grid data with required columns.
-        shape: Interpolation type, "linear" or "bspline".
+        shape: Interpolation type, "bspline" (default, smooth derivatives)
+            or "linear". "bspline" is strongly recommended for any
+            non-trivial grid: linear interpolants have discontinuous
+            derivatives at every grid-cell boundary, which causes IPOPT's
+            line search to oscillate on blended or constrained objectives.
 
     Returns:
         ca.interpolant: CasADi interpolant object.
