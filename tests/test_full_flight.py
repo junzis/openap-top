@@ -77,7 +77,7 @@ def test_complete_flight_callable_objective():
 
     df = opt.trajectory(objective=fuel_twice)
     assert df is not None
-    assert opt.solver.stats()["success"]
+    assert opt.success
 
 
 def test_complete_flight_return_failed_returns_df_on_tight_fuel_budget():
@@ -99,7 +99,7 @@ def test_complete_flight_return_failed_returns_df_on_tight_fuel_budget():
     # back a DataFrame (not None).
     assert df is not None
     # Verify we actually hit the failure path (not a miraculous convergence).
-    assert not opt.solver.stats()["success"], (
+    assert not opt.success, (
         "max_fuel=100 should be infeasible; if this passes, something is wrong "
         "with the solver or route"
     )

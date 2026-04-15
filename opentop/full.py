@@ -196,7 +196,7 @@ class CompleteFlight(Base):
         df = self._solve(X, U, **_kwargs)
         df_copy = df.copy()
 
-        if not self.solver.stats()["success"]:
+        if not self._last_solution.stats()["success"]:
             warnings.warn("flight might be infeasible.")
 
         if df.altitude.max() < 5000:

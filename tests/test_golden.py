@@ -32,10 +32,10 @@ def test_complete_flight_golden_objective_within_1pct():
     assert drift < TOLERANCE, (
         f"golden-smoke drift {drift * 100:.3f}% > {TOLERANCE * 100:.1f}%: "
         f"baseline={baseline} now={obj_now} "
-        f"success={opt.solver.stats()['success']} iters={opt.solver.stats()['iter_count']} "
+        f"success={opt.success} iters={opt.stats['iter_count']} "
         f"(baseline recorded at {record['commit_sha']})"
     )
     # Then sanity-check the solver did converge (< max_iter cap).
-    assert opt.solver.stats()["success"], (
-        f"solver failed: {opt.solver.stats()}"
+    assert opt.success, (
+        f"solver failed: {opt.stats}"
     )

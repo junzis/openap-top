@@ -175,7 +175,29 @@ class Base:
             warnings.warn("The destination is likely out of maximum cruise range.")
 
         self.debug = False
+        self._last_solution = None
         self.setup()
+
+    @property
+    def solver(self):
+        """Deprecated: use `optimizer.stats` or `optimizer.success`. Will be removed in v2.3."""
+        warnings.warn(
+            "optimizer.solver is deprecated; use optimizer.stats or optimizer.success. "
+            "Will be removed in v2.3.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._last_solution
+
+    @property
+    def stats(self) -> dict:
+        """Solver stats dict from the most recent solve."""
+        return self._last_solution.stats()
+
+    @property
+    def success(self) -> bool:
+        """Whether the most recent solve succeeded."""
+        return bool(self._last_solution.stats()["success"])
 
     def proj(self, lon, lat, inverse=False, symbolic=False):
         """Project between lon/lat and local cartesian coordinates.
@@ -560,7 +582,7 @@ class Base:
                 warnings.warn(f"Solver failed: {e}")
             sol = self._opti.debug
 
-        self.solver = sol
+        self._last_solution = sol
         # Undo auto_rescale_objective so callers always see the physical value.
         self.objective_value = float(sol.value(self._opti.f)) * self._objective_rescale
 
@@ -710,7 +732,7 @@ class Base:
         rejected solve); it is coerced to an empty DataFrame in the result.
         """
         from ._options import TrajectoryResult
-        stats = dict(self.solver.stats()) if getattr(self, "solver", None) else {}
+        stats = dict(self._last_solution.stats()) if getattr(self, "_last_solution", None) else {}
         has_df = df is not None and len(df) > 0
         return TrajectoryResult(
             df=df if df is not None else pd.DataFrame(),
@@ -790,7 +812,7 @@ class Base:
         has_interpolant = trajectory_kwargs.get("interpolant") is not None
 
         def _make_candidate(index, df, lat_km, alt_ft, wall_time_s):
-            stats = self.solver.stats() if hasattr(self, "solver") else {}
+            stats = self._last_solution.stats() if hasattr(self, "_last_solution") else {}
             grid = (
                 float(df["grid_cost"].sum(skipna=True))
                 if has_interpolant

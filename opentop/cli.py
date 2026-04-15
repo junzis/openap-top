@@ -321,7 +321,7 @@ def optimize(
     df = opt.trajectory(**traj_kwargs)
     wall = time.time() - t0
 
-    stats = opt.solver.stats()
+    stats = opt.stats
     click.echo("")
     click.echo(f"  success:       {stats.get('success')}")
     click.echo(f"  return_status: {stats.get('return_status')}")
