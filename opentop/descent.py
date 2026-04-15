@@ -182,22 +182,22 @@ class Descent(Base):
 
         # Constrain time and dt
         for k in range(1, self.nodes):
-            opti.subject_to(opti.bounded(-1, X[k][4] - X[k - 1][4] - self.dt, 1))
+            opti.subject_to(opti.bounded(-1, X[k][4] - X[k - 1][4] - self.dt, 1))  # type: ignore[arg-type]  # CasADi stubs wrong: bounded(float, expr, float) is valid
 
         # Smooth Mach number changes
         for k in range(1, self.nodes):
-            opti.subject_to(opti.bounded(-0.1, U[k][0] - U[k - 1][0], 0.1))
+            opti.subject_to(opti.bounded(-0.1, U[k][0] - U[k - 1][0], 0.1))  # type: ignore[arg-type]  # CasADi stubs wrong
 
         # Smooth vertical rate changes
         for k in range(1, self.nodes):
             opti.subject_to(
-                opti.bounded(-1000 * fpm, U[k][1] - U[k - 1][1], 1000 * fpm)
+                opti.bounded(-1000 * fpm, U[k][1] - U[k - 1][1], 1000 * fpm)  # type: ignore[arg-type]  # CasADi stubs wrong
             )
 
         # Smooth heading changes
         for k in range(1, self.nodes):
             opti.subject_to(
-                opti.bounded(-5 * pi / 180, U[k][2] - U[k - 1][2], 5 * pi / 180)
+                opti.bounded(-5 * pi / 180, U[k][2] - U[k - 1][2], 5 * pi / 180)  # type: ignore[arg-type]  # CasADi stubs wrong
             )
 
         # Force and energy constraints

@@ -155,7 +155,7 @@ class CompleteFlight(Base):
 
             for k in range(idx_toc, idx_tod):
                 # Limit vertical rate during cruise
-                opti.subject_to(opti.bounded(-500 * fpm, U[k][1], 500 * fpm))
+                opti.subject_to(opti.bounded(-500 * fpm, U[k][1], 500 * fpm))  # type: ignore[arg-type]  # CasADi stubs wrong: bounded(float, expr, float) is valid
                 # Minimum cruise alt FL150
                 opti.subject_to(X[k][2] >= 15000 * ft)
 
@@ -194,24 +194,24 @@ class CompleteFlight(Base):
 
         # ts and dt consistency
         for k in range(self.nodes - 1):
-            opti.subject_to(opti.bounded(-1, X[k + 1][4] - X[k][4] - self.dt, 1))
+            opti.subject_to(opti.bounded(-1, X[k + 1][4] - X[k][4] - self.dt, 1))  # type: ignore[arg-type]  # CasADi stubs wrong
 
         # Smooth Mach number change
         for k in range(self.nodes - 1):
-            opti.subject_to(opti.bounded(-0.2, U[k + 1][0] - U[k][0], 0.2))
+            opti.subject_to(opti.bounded(-0.2, U[k + 1][0] - U[k][0], 0.2))  # type: ignore[arg-type]  # CasADi stubs wrong
 
         # Smooth vertical rate change
         for k in range(self.nodes - 1):
-            opti.subject_to(opti.bounded(-500 * fpm, U[k + 1][1] - U[k][1], 500 * fpm))
+            opti.subject_to(opti.bounded(-500 * fpm, U[k + 1][1] - U[k][1], 500 * fpm))  # type: ignore[arg-type]  # CasADi stubs wrong
 
         # Smooth heading change
         for k in range(self.nodes - 1):
             opti.subject_to(
-                opti.bounded(-15 * pi / 180, U[k + 1][2] - U[k][2], 15 * pi / 180)
+                opti.bounded(-15 * pi / 180, U[k + 1][2] - U[k][2], 15 * pi / 180)  # type: ignore[arg-type]  # CasADi stubs wrong
             )
 
         # Fuel constraint
-        opti.subject_to(opti.bounded(0, X[0][3] - X[-1][3], self.fuel_max))
+        opti.subject_to(opti.bounded(0, X[0][3] - X[-1][3], self.fuel_max))  # type: ignore[arg-type]  # CasADi stubs wrong
 
         if customized_max_fuel is not None:
             opti.subject_to(X[0][3] - X[-1][3] <= customized_max_fuel)

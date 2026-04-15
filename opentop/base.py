@@ -24,6 +24,27 @@ if TYPE_CHECKING:
 
 
 class Base:
+    # Attributes set by subclass init_conditions — declared here for pyright.
+    # Runtime values are always assigned before _build_opti is called.
+    x_lb: list
+    x_ub: list
+    x_0_lb: list
+    x_0_ub: list
+    x_f_lb: list
+    x_f_ub: list
+    u_lb: list
+    u_ub: list
+    u_0_lb: list
+    u_0_ub: list
+    u_f_lb: list
+    u_f_ub: list
+    x_guess: "np.ndarray"
+    u_guess: list
+
+    # Typed as Any so post-solve accesses (.stats(), .value()) don't need guards.
+    # _last_solution is None before solve() and an OptiSol/OptiDebug after.
+    _last_solution: Any = None
+
     def __init__(
         self,
         actype: str,
@@ -47,13 +68,13 @@ class Base:
         """
         if isinstance(origin, str):
             ap1 = openap.nav.airport(origin)
-            self.lat1, self.lon1 = ap1["lat"], ap1["lon"]
+            self.lat1, self.lon1 = ap1["lat"], ap1["lon"]  # type: ignore[index]  # openap stubs lack dict return type
         else:
             self.lat1, self.lon1 = origin
 
         if isinstance(destination, str):
             ap2 = openap.nav.airport(destination)
-            self.lat2, self.lon2 = ap2["lat"], ap2["lon"]
+            self.lat2, self.lon2 = ap2["lat"], ap2["lon"]  # type: ignore[index]  # openap stubs lack dict return type
         else:
             self.lat2, self.lon2 = destination
 
@@ -308,16 +329,16 @@ class Base:
             objective: Objective name (str), "ci:N" format, or callable(x, u, dt).
             **kwargs: Passed to the objective function.
         """
-        # Model variables
-        xp = ca.MX.sym("xp")
-        yp = ca.MX.sym("yp")
-        h = ca.MX.sym("h")
-        m = ca.MX.sym("m")
-        ts = ca.MX.sym("ts")
+        # Model variables — CasADi stubs incorrectly type MX.sym(str) as MX.sym(MX)
+        xp = ca.MX.sym("xp")  # type: ignore[arg-type]
+        yp = ca.MX.sym("yp")  # type: ignore[arg-type]
+        h = ca.MX.sym("h")  # type: ignore[arg-type]
+        m = ca.MX.sym("m")  # type: ignore[arg-type]
+        ts = ca.MX.sym("ts")  # type: ignore[arg-type]
 
-        mach = ca.MX.sym("mach")
-        vs = ca.MX.sym("vs")
-        psi = ca.MX.sym("psi")
+        mach = ca.MX.sym("mach")  # type: ignore[arg-type]
+        vs = ca.MX.sym("vs")  # type: ignore[arg-type]
+        psi = ca.MX.sym("psi")  # type: ignore[arg-type]
 
         self.x = ca.vertcat(xp, yp, h, m, ts)
         self.u = ca.vertcat(mach, vs, psi)
@@ -410,7 +431,7 @@ class Base:
 
         # Initial state
         Xk = self._opti.variable(nstates)
-        self._opti.subject_to(self._opti.bounded(self.x_0_lb, Xk, self.x_0_ub))
+        self._opti.subject_to(self._opti.bounded(self.x_0_lb, Xk, self.x_0_ub))  # type: ignore[arg-type]  # CasADi stubs wrong: bounded(lb, expr, ub) accepts lists
         self._opti.set_initial(Xk, self.x_guess[0])
         X.append(Xk)
 
@@ -426,7 +447,7 @@ class Base:
             else:
                 u_lb, u_ub = self.u_lb, self.u_ub
 
-            self._opti.subject_to(self._opti.bounded(u_lb, Uk, u_ub))
+            self._opti.subject_to(self._opti.bounded(u_lb, Uk, u_ub))  # type: ignore[arg-type]  # CasADi stubs wrong
             self._opti.set_initial(Uk, self.u_guess)
 
             # Collocation points within this interval
@@ -434,7 +455,7 @@ class Base:
             for j in range(self.polydeg):
                 Xkj = self._opti.variable(nstates)
                 Xc.append(Xkj)
-                self._opti.subject_to(self._opti.bounded(self.x_lb, Xkj, self.x_ub))
+                self._opti.subject_to(self._opti.bounded(self.x_lb, Xkj, self.x_ub))  # type: ignore[arg-type]  # CasADi stubs wrong
                 self._opti.set_initial(Xkj, self.x_guess[k])
 
             # Collocation equations and quadrature
@@ -444,7 +465,7 @@ class Base:
                 for r in range(self.polydeg):
                     xpc = xpc + C[r + 1, j] * Xc[r]
 
-                fj, qj = self.func_dynamics(Xc[j - 1], Uk)
+                fj, qj = self.func_dynamics(Xc[j - 1], Uk)  # type: ignore[misc]  # CasADi Function.__call__ return is opaque to pyright
                 self._opti.subject_to(self.dt * fj == xpc)
 
                 Xk_end = Xk_end + D[j] * Xc[j - 1]
@@ -459,7 +480,7 @@ class Base:
             else:
                 x_lb, x_ub = self.x_f_lb, self.x_f_ub
 
-            self._opti.subject_to(self._opti.bounded(x_lb, Xk, x_ub))
+            self._opti.subject_to(self._opti.bounded(x_lb, Xk, x_ub))  # type: ignore[arg-type]  # CasADi stubs wrong
             self._opti.set_initial(Xk, self.x_guess[k])
 
             # Continuity constraint
@@ -476,7 +497,7 @@ class Base:
         if kwargs.get("auto_rescale_objective", False):
             x_init = self._opti.debug.value(self._opti.x, self._opti.initial())
             j_at_init = ca.Function("j_at_init", [self._opti.x], [J])
-            f0 = float(j_at_init(x_init))
+            f0 = float(j_at_init(x_init))  # type: ignore[arg-type]  # CasADi Function.__call__ return type is opaque to pyright
             # Only skip rescaling if f0 is essentially zero to avoid
             # divide-by-zero. Otherwise rescale by abs(f0) in either
             # direction — crucial for climate-metric objectives where
@@ -539,7 +560,7 @@ class Base:
             emission = openap.Emission(
                 self.actype, self.engtype, use_synonym=self.use_synonym
             )
-            v = openap.aero.mach2tas(mach, h, dT=self.dT)
+            v = openap.aero.mach2tas(mach, h, dT=self.dT)  # type: ignore[arg-type]  # openap stubs type dT as int; float is correct
 
         ff = fuelflow.enroute(m, v / kts, h / ft, vs / fpm, dT=self.dT)
         co2 = emission.co2(ff)

@@ -96,6 +96,6 @@ def test_cruise_initial_guess_is_honored_with_no_double_init(aircraft_type, shor
         short_flight["destination"],
         short_flight["m0"],
     )
-    result = opt2.trajectory(objective="fuel", initial_guess=baseline)
+    result = opt2.trajectory(objective="fuel", initial_guess=baseline)  # type: ignore[arg-type]  # trajectory() without result_object returns DataFrame; passes as initial_guess
     assert result is not None
-    assert len(result) == len(baseline)
+    assert len(result) == len(baseline)  # type: ignore[arg-type]  # trajectory() without result_object always returns DataFrame

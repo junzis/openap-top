@@ -37,12 +37,12 @@ def map(df, windfield=None, ax=None, barb_steps=10):
                 )
             )
 
-        ax.set_extent([lonmin - 4, lonmax + 4, latmin - 2, latmax + 2])
-        ax.add_feature(OCEAN, facecolor="#d1e0e0", zorder=-1, lw=0)
-        ax.add_feature(LAND, facecolor="#f5f5f5", lw=0)
-        ax.add_feature(BORDERS, lw=0.5, color="gray")
-        ax.gridlines(draw_labels=True, color="gray", alpha=0.5, ls="--")
-        ax.coastlines(resolution="50m", lw=0.5, color="gray")
+        ax.set_extent([lonmin - 4, lonmax + 4, latmin - 2, latmax + 2])  # type: ignore[attr-defined]  # cartopy GeoAxes methods not in matplotlib stubs
+        ax.add_feature(OCEAN, facecolor="#d1e0e0", zorder=-1, lw=0)  # type: ignore[attr-defined]
+        ax.add_feature(LAND, facecolor="#f5f5f5", lw=0)  # type: ignore[attr-defined]
+        ax.add_feature(BORDERS, lw=0.5, color="gray")  # type: ignore[attr-defined]
+        ax.gridlines(draw_labels=True, color="gray", alpha=0.5, ls="--")  # type: ignore[attr-defined]
+        ax.coastlines(resolution="50m", lw=0.5, color="gray")  # type: ignore[attr-defined]
 
         if windfield is not None:
             # get the closed altitude

@@ -185,12 +185,12 @@ class Cruise(Base):
 
         # ts and dt consistency
         for k in range(self.nodes - 1):
-            opti.subject_to(opti.bounded(-1, X[k + 1][4] - X[k][4] - self.dt, 1))
+            opti.subject_to(opti.bounded(-1, X[k + 1][4] - X[k][4] - self.dt, 1))  # type: ignore[arg-type]  # CasADi stubs wrong: bounded(float, expr, float) is valid
 
         # Smooth heading change
         for k in range(self.nodes - 1):
             opti.subject_to(
-                opti.bounded(-15 * pi / 180, U[k + 1][2] - U[k][2], 15 * pi / 180)
+                opti.bounded(-15 * pi / 180, U[k + 1][2] - U[k][2], 15 * pi / 180)  # type: ignore[arg-type]  # CasADi stubs wrong
             )
 
         # Optional constraints
@@ -211,7 +211,7 @@ class Cruise(Base):
                 opti.subject_to(U[k][1] >= 0)
 
         # Fuel constraint
-        opti.subject_to(opti.bounded(0, X[0][3] - X[-1][3], self.fuel_max))
+        opti.subject_to(opti.bounded(0, X[0][3] - X[-1][3], self.fuel_max))  # type: ignore[arg-type]  # CasADi stubs wrong
 
         if customized_max_fuel is not None:
             opti.subject_to(X[0][3] - X[-1][3] <= customized_max_fuel)

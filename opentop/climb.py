@@ -181,7 +181,7 @@ class Climb(Base):
 
         # Smooth Mach number changes
         for k in range(1, self.nodes):
-            opti.subject_to(opti.bounded(-0.05, U[k][0] - U[k - 1][0], 0.05))
+            opti.subject_to(opti.bounded(-0.05, U[k][0] - U[k - 1][0], 0.05))  # type: ignore[arg-type]  # CasADi stubs wrong: bounded(float, expr, float) is valid
 
         # Total energy model
         for k in range(self.nodes - 1):
@@ -199,16 +199,16 @@ class Climb(Base):
 
         # Constrain time and dt
         for k in range(1, self.nodes):
-            opti.subject_to(opti.bounded(-1, X[k][4] - X[k - 1][4] - self.dt, 1))
+            opti.subject_to(opti.bounded(-1, X[k][4] - X[k - 1][4] - self.dt, 1))  # type: ignore[arg-type]  # CasADi stubs wrong
 
         # Smooth vertical rate changes
         for k in range(1, self.nodes):
-            opti.subject_to(opti.bounded(-500 * fpm, U[k][1] - U[k - 1][1], 500 * fpm))
+            opti.subject_to(opti.bounded(-500 * fpm, U[k][1] - U[k - 1][1], 500 * fpm))  # type: ignore[arg-type]  # CasADi stubs wrong
 
         # Smooth heading changes
         for k in range(1, self.nodes - 1):
             opti.subject_to(
-                opti.bounded(-5 * pi / 180, U[k][2] - U[k - 1][2], 5 * pi / 180)
+                opti.bounded(-5 * pi / 180, U[k][2] - U[k - 1][2], 5 * pi / 180)  # type: ignore[arg-type]  # CasADi stubs wrong
             )
 
         # Final position should be along the cruise trajectory

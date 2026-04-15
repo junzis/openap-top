@@ -46,4 +46,4 @@ def test_cruise_with_4d_grid_cost_converges(interp_4d):
     )
     assert df is not None, "trajectory returned None"
     assert opt.solver.stats()["success"], f"solver failed: {opt.solver.stats()}"
-    assert "grid_cost" in df.columns, "grid_cost column missing from trajectory"
+    assert "grid_cost" in df.columns, "grid_cost column missing from trajectory"  # type: ignore[union-attr]  # trajectory() without result_object always returns DataFrame

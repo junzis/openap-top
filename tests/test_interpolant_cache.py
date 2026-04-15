@@ -59,8 +59,8 @@ class TestInterpolantCache:
             (-2.5, 42.0, 7000.0, 0.0),
             (3.0, 48.0, 11000.0, 3600.0),
         ]:
-            original_val = float(original(ca.vertcat(lon, lat, h, ts)))
-            loaded_val = float(loaded(ca.vertcat(lon, lat, h, ts)))
+            original_val = float(original(ca.vertcat(lon, lat, h, ts)))  # type: ignore[arg-type]  # CasADi Function.__call__ return type opaque to pyright
+            loaded_val = float(loaded(ca.vertcat(lon, lat, h, ts)))  # type: ignore[arg-type]
             assert original_val == pytest.approx(loaded_val, rel=1e-10)
 
     def test_save_creates_parent_dirs(self, tmp_path):
@@ -85,7 +85,7 @@ class TestInterpolantCache:
         )
         assert cache_file.exists()
 
-        val = float(interp(ca.vertcat(0.0, 45.0, 10000.0, 1800.0)))
+        val = float(interp(ca.vertcat(0.0, 45.0, 10000.0, 1800.0)))  # type: ignore[arg-type]  # CasADi Function.__call__ return type opaque to pyright
         assert val > 0  # cost field peaks near (lat=45, lon=0, h=10000)
 
     def test_cached_interpolant_reuses_cache_on_second_call(self, tmp_path):
@@ -107,7 +107,7 @@ class TestInterpolantCache:
 
         # Values should match
         point = ca.vertcat(1.0, 44.0, 9000.0, 1800.0)
-        assert float(first(point)) == pytest.approx(float(second(point)), rel=1e-10)
+        assert float(first(point)) == pytest.approx(float(second(point)), rel=1e-10)  # type: ignore[arg-type]  # CasADi Function.__call__ return type opaque to pyright
 
     def test_cached_interpolant_supports_3d_grid(self, tmp_path):
         """Grid without a 'ts' column should still cache correctly."""
@@ -123,4 +123,4 @@ class TestInterpolantCache:
             df, cache_file, shape="linear"
         )
         point = ca.vertcat(0.0, 45.0, 10000.0)
-        assert float(first(point)) == pytest.approx(float(second(point)), rel=1e-10)
+        assert float(first(point)) == pytest.approx(float(second(point)), rel=1e-10)  # type: ignore[arg-type]  # CasADi Function.__call__ return type opaque to pyright

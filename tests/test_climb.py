@@ -96,5 +96,5 @@ def test_climb_north_south_route_converges():
 
     clb = top.Climb("A320", (52.308, 4.764), (55.618, 12.656), m0=0.85)
     clb.setup(max_iter=800)
-    dfcl = clb.trajectory(objective="fuel", df_cruise=dfcr)
+    dfcl = clb.trajectory(objective="fuel", df_cruise=dfcr)  # type: ignore[arg-type]  # trajectory() without result_object returns DataFrame
     assert dfcl is not None

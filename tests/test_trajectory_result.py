@@ -45,13 +45,13 @@ def test_trajectory_returns_result_object_when_flag_set():
 def test_unknown_kwarg_raises_type_error():
     opt = _fast_cruise()
     with pytest.raises(TypeError):
-        opt.trajectory(objective="fuel", nonsense_kwarg=42)
+        opt.trajectory(objective="fuel", nonsense_kwarg=42)  # type: ignore[call-arg]  # intentionally passing invalid kwarg to test TypeError
 
 
 def test_unknown_kwarg_raises_type_error_on_complete_flight():
     opt = top.CompleteFlight("A320", "EHAM", "EDDF", m0=0.85)
     with pytest.raises(TypeError):
-        opt.trajectory(objective="fuel", another_bogus_kwarg=1)
+        opt.trajectory(objective="fuel", another_bogus_kwarg=1)  # type: ignore[call-arg]  # intentionally passing invalid kwarg to test TypeError
 
 
 def test_result_object_df_matches_default_return():
@@ -66,4 +66,4 @@ def test_result_object_df_matches_default_return():
     # (Column-wise equality is risky due to ~1e-15 solver noise across runs.)
     assert abs(float(opt1.objective_value) - r.objective) < 1e-6
     # Row count should match exactly.
-    assert len(df_direct) == len(r.df)
+    assert len(df_direct) == len(r.df)  # type: ignore[arg-type]  # trajectory() without result_object always returns DataFrame

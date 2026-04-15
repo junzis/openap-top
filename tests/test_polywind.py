@@ -42,10 +42,10 @@ def test_polywind_symbolic_path_returns_casadi_expr():
     df = _fake_wind_df()
     proj = _proj()
     w = tools.PolyWind(df, proj, 46.0, 1.0, 54.0, 9.0)
-    x = ca.SX.sym("x")
-    y = ca.SX.sym("y")
-    h = ca.SX.sym("h")
-    ts = ca.SX.sym("ts")
+    x = ca.SX.sym("x")  # type: ignore[arg-type]  # CasADi stubs wrong: SX.sym(str) is valid
+    y = ca.SX.sym("y")  # type: ignore[arg-type]
+    h = ca.SX.sym("h")  # type: ignore[arg-type]
+    ts = ca.SX.sym("ts")  # type: ignore[arg-type]
     u = w.calc_u(x, y, h, ts)
     v = w.calc_v(x, y, h, ts)
     # Result must be a CasADi SX (symbolic), not a plain float.
@@ -62,8 +62,8 @@ def test_polywind_numeric_matches_symbolic_evaluation():
     # numeric path
     u_num = float(w.calc_u(x_num, y_num, 5000, 1800))
     # symbolic path, then substitute
-    x, y, h, ts = ca.SX.sym("x"), ca.SX.sym("y"), ca.SX.sym("h"), ca.SX.sym("ts")
+    x, y, h, ts = ca.SX.sym("x"), ca.SX.sym("y"), ca.SX.sym("h"), ca.SX.sym("ts")  # type: ignore[arg-type]  # CasADi stubs wrong
     u_sym = w.calc_u(x, y, h, ts)
     f = ca.Function("f", [x, y, h, ts], [u_sym])
-    u_eval = float(f(x_num, y_num, 5000, 1800))
+    u_eval = float(f(x_num, y_num, 5000, 1800))  # type: ignore[arg-type]  # CasADi Function.__call__ return type opaque to pyright
     assert abs(u_num - u_eval) < 1e-6, f"numeric {u_num} != symbolic eval {u_eval}"

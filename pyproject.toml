@@ -74,6 +74,7 @@ include = ["opentop"]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
 reportMissingTypeStubs = false
+reportMissingImports = false          # CasADi / pyproj / sklearn / openap don't ship stubs
 
 [tool.hatch.build.targets.wheel]
 universal = true

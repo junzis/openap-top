@@ -40,7 +40,7 @@ def test_unknown_kwarg_raises_type_error(aircraft_type, short_flight):
     )
     optimizer.setup(nodes=20)
     with pytest.raises(TypeError):
-        optimizer.trajectory(objective="fuel", nonsense_kwarg=42)
+        optimizer.trajectory(objective="fuel", nonsense_kwarg=42)  # type: ignore[call-arg]  # intentionally passing invalid kwarg to test TypeError
 
 
 def test_interpolant_none_ok(aircraft_type, short_flight):
@@ -55,5 +55,5 @@ def test_interpolant_none_ok(aircraft_type, short_flight):
     optimizer.setup(nodes=20)
     flight = optimizer.trajectory(objective="fuel", interpolant=None)
     assert flight is not None
-    assert "fuel_cost" in flight.columns
-    assert "grid_cost" in flight.columns
+    assert "fuel_cost" in flight.columns  # type: ignore[union-attr]  # trajectory() without result_object always returns DataFrame
+    assert "grid_cost" in flight.columns  # type: ignore[union-attr]

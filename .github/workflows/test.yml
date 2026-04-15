@@ -27,5 +27,8 @@ jobs:
       - name: Run pytest
         run: uv run pytest tests/ -n auto
 
-      - name: Run pyright (non-blocking)
-        run: uv run --with pyright pyright opentop || true
+      - name: Run pyright (opentop)
+        run: uv run --with pyright pyright opentop
+
+      - name: Run pyright (tests)
+        run: uv run --with pyright pyright --project pyrightconfig.tests.json

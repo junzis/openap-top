@@ -1,0 +1,9 @@
+{
+  "include": ["tests"],
+  "exclude": ["tests/benchmark.py", "tests/compare_nlp_scaling.py", "tests/benchmarks"],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "reportMissingTypeStubs": false,
+  "reportMissingImports": false,
+  "extraPaths": ["."]
+}

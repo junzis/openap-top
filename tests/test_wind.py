@@ -36,5 +36,7 @@ def test_cruise_with_constant_tailwind_converges(constant_tailwind_df):
     assert df is not None, "trajectory returned None"
     assert opt.success, f"solver failed: {opt.stats}"
     # Realistic cruise altitude (above FL300 / ~9100 m).
+    # trajectory() without result_object=True always returns a DataFrame.
+    assert isinstance(df, pd.DataFrame)
     assert df["altitude"].max() > 9_000 * 3.28084, \
         f"max altitude too low: {df['altitude'].max()} ft"
