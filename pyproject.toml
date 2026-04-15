@@ -69,6 +69,12 @@ known-first-party = ["numpy", "pandas", "pyproj"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.pyright]
+include = ["opentop"]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+reportMissingTypeStubs = false
+
 [tool.hatch.build.targets.wheel]
 universal = true
 packages = ["opentop"]
