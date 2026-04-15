@@ -74,4 +74,4 @@ class TestClimb:
     def test_fuel_cost_column(self, climb_clipped_df):
         df = climb_clipped_df
         assert "fuel_cost" in df.columns
-        assert (df["fuel_cost"] >= 0).all()
+        assert (df["fuel_cost"].dropna() >= 0).all()

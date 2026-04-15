@@ -693,20 +693,29 @@ class Base:
         alt = (h / ft).round()
         vertrate = (vs / fpm).round()
 
-        # Calculate fuel_cost per segment
-        fuel_cost = self.obj_fuel(X, U, self.dt, symbolic=False)
+        # Per-segment fuel cost derived directly from the mass trajectory.
+        # mass[k] - mass[k+1] is the exact fuel burnt on the [k, k+1] interval
+        # as enforced by the collocation dynamics (higher-order quadrature);
+        # this guarantees `fuel_cost.sum() == m0 - m_final` up to floating
+        # point. Recomputing via obj_fuel() would use left-endpoint rectangular
+        # quadrature and disagree with the physical fuel burn.
+        fuel_cost = np.append(-np.diff(mass), np.nan)
 
-        # Calculate grid_cost per segment (NaN if no interpolant)
+        # Grid cost has no state-based equivalent; integrate left-endpoint
+        # over the N intervals and pad the terminal row with NaN.
         if interpolant is not None:
-            grid_cost = self.obj_grid_cost(
-                X,
-                U,
-                self.dt,
-                interpolant=interpolant,
-                time_dependent=time_dependent,
-                n_dim=n_dim,
-                symbolic=False,
-            )
+            grid_cost_seg = np.asarray(
+                self.obj_grid_cost(
+                    X[:, :-1],
+                    U[:, :-1],
+                    self.dt,
+                    interpolant=interpolant,
+                    time_dependent=time_dependent,
+                    n_dim=n_dim,
+                    symbolic=False,
+                )
+            ).ravel()
+            grid_cost = np.append(grid_cost_seg, np.nan)
         else:
             grid_cost = np.full(n, np.nan)
 

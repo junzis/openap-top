@@ -64,4 +64,4 @@ class TestDescent:
     def test_fuel_cost_column(self, descent_full_df):
         df = descent_full_df
         assert "fuel_cost" in df.columns
-        assert (df["fuel_cost"] >= 0).all()
+        assert (df["fuel_cost"].dropna() >= 0).all()

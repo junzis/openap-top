@@ -58,7 +58,7 @@ class TestCruise:
 
     def test_fuel_cost_column(self, cruise_df):
         assert "fuel_cost" in cruise_df.columns
-        assert (cruise_df["fuel_cost"] >= 0).all()
+        assert (cruise_df["fuel_cost"].dropna() >= 0).all()
 
     def test_grid_cost_nan_without_interpolant(self, cruise_df):
         assert "grid_cost" in cruise_df.columns

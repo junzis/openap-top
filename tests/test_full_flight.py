@@ -66,7 +66,7 @@ class TestCompleteFlight:
     def test_fuel_cost_column(self, complete_flight_df):
         df = complete_flight_df
         assert "fuel_cost" in df.columns
-        assert (df["fuel_cost"] >= 0).all()
+        assert (df["fuel_cost"].dropna() >= 0).all()
 
     def test_medium_route(self, complete_flight_medium_df):
         df = complete_flight_medium_df
