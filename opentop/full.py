@@ -6,13 +6,9 @@ import openap.casadi as oc
 from openap.aero import fpm, ft, kts
 
 import numpy as np
-import openap
 import pandas as pd
 
 from .base import Base
-from .climb import Climb
-from .cruise import Cruise
-from .descent import Descent
 
 try:
     from . import tools
@@ -198,116 +194,3 @@ class CompleteFlight(Base):
             return df_copy
 
         return df
-
-
-class MultiPhase(Base):
-    """Multi-phase (climb + cruise + descent) trajectory optimizer."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.cruise = Cruise(*args, **kwargs)
-        self.climb = Climb(*args, **kwargs)
-        self.descent = Descent(*args, **kwargs)
-
-    def enable_wind(self, windfield: pd.DataFrame):
-        """Enable wind for all phases.
-
-        Args:
-            windfield: DataFrame with wind data.
-        """
-        w = tools.PolyWind(
-            windfield, self.proj, self.lat1, self.lon1, self.lat2, self.lon2
-        )
-        self.cruise.wind = w
-        self.climb.wind = w
-        self.descent.wind = w
-
-    def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
-        """Compute the optimal multi-phase trajectory.
-
-        Solves climb, cruise, and descent sequentially, then
-        concatenates the results.
-
-        Args:
-            objective: Single objective (str) or per-phase tuple
-                (climb_obj, cruise_obj, descent_obj). Default "fuel".
-            **kwargs: Passed to each phase optimizer.
-
-        Returns:
-            pd.DataFrame: Combined trajectory.
-        """
-        if isinstance(objective, str):
-            obj_cl = obj_cr = obj_de = objective
-        else:
-            obj_cl, obj_cr, obj_de = objective
-
-        if self.debug:
-            print("Finding the preliminary optimal cruise trajectory parameters...")
-
-        dfcr = self.cruise.trajectory(obj_cr, **kwargs)
-
-        # climb
-        if self.debug:
-            print("Finding optimal climb trajectory...")
-
-        dfcl = self.climb.trajectory(obj_cl, dfcr, **kwargs)
-
-        # cruise
-        if self.debug:
-            print("Finding optimal cruise trajectory...")
-
-        self.cruise.mass_init = dfcl.mass.iloc[-1]
-        self.cruise.lat1 = dfcl.latitude.iloc[-1]
-        self.cruise.lon1 = dfcl.longitude.iloc[-1]
-        dfcr = self.cruise.trajectory(obj_cr, **kwargs)
-
-        # descent
-        if self.debug:
-            print("Finding optimal descent trajectory...")
-
-        self.descent.mass_init = dfcr.mass.iloc[-1]
-        dfde = self.descent.trajectory(obj_de, dfcr, **kwargs)
-
-        # find top of descent
-        dbrg = np.array(
-            openap.aero.bearing(
-                dfde.latitude.iloc[0],
-                dfde.longitude.iloc[0],
-                dfcr.latitude,
-                dfcr.longitude,
-            )
-        )
-        ddbrg = np.abs((dbrg[1:] - dbrg[:-1]).round())
-        idx = np.where(ddbrg > 90)[0]
-        idx_tod = idx[0] if len(idx) > 0 else -1
-
-        dfcr = dfcr.iloc[: idx_tod + 1]
-
-        # time at top of climb
-        dfcr.ts = dfcl.ts.iloc[-1] + dfcr.ts
-
-        # time at top of descent, considering the distant between last point in cruise and tod
-
-        x1, y1 = self.proj(dfcr.longitude.iloc[-1], dfcr.latitude.iloc[-1])
-        x2, y2 = self.proj(dfde.longitude.iloc[0], dfde.latitude.iloc[0])
-
-        d = np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
-        v = dfcr.tas.iloc[-1] * kts
-        dt = np.round(d / v)
-        dfde.ts = dfcr.ts.iloc[-1] + dt + dfde.ts
-
-        df_full = pd.concat([dfcl, dfcr, dfde], ignore_index=True)
-
-        return df_full
-
-    def get_solver_stats(self):
-        """Get solver statistics for all phases.
-
-        Returns:
-            dict: Solver statistics for climb, cruise, and descent phases.
-        """
-        return {
-            "climb": self.climb.solver.stats(),
-            "cruise": self.cruise.solver.stats(),
-            "descent": self.descent.solver.stats(),
-        }
