@@ -420,6 +420,8 @@ class Base:
                 pass
         if kwargs.get("interpolant") is not None:
             needs_exact_hessian = True
+        if kwargs.get("exact_hessian", False):
+            needs_exact_hessian = True
         if needs_exact_hessian:
             self.solver_options["ipopt.hessian_approximation"] = "exact"
 
@@ -682,6 +684,34 @@ class Base:
         self.U = U
         self.dt = dt
         return df
+
+    def _make_result(self, df):
+        """Package a trajectory DataFrame into a TrajectoryResult.
+
+        Used when trajectory(result_object=True). ``df`` may be None (from a
+        rejected solve); it is coerced to an empty DataFrame in the result.
+        """
+        from ._options import TrajectoryResult
+        stats = dict(self.solver.stats()) if getattr(self, "solver", None) else {}
+        has_df = df is not None and len(df) > 0
+        return TrajectoryResult(
+            df=df if df is not None else pd.DataFrame(),
+            success=bool(stats.get("success", False)),
+            status=str(stats.get("return_status", "")),
+            objective=float(getattr(self, "objective_value", float("nan"))),
+            iters=int(stats.get("iter_count", 0)),
+            fuel=(
+                float(df["mass"].iloc[0] - df["mass"].iloc[-1])
+                if has_df and "mass" in df.columns
+                else float("nan")
+            ),
+            grid_cost=(
+                float(df["grid_cost"].sum(skipna=True))
+                if has_df and "grid_cost" in df.columns
+                else float("nan")
+            ),
+            stats=stats,
+        )
 
     def multi_start_trajectory(
         self,

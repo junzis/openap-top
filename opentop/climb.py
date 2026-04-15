@@ -92,22 +92,40 @@ class Climb(Base):
         # Control - guesses
         self.u_guess = [0.2, 1500 * fpm, od_psi]
 
-    def trajectory(self, objective="fuel", df_cruise=None, **kwargs) -> pd.DataFrame:
+    def trajectory(
+        self,
+        objective="fuel",
+        df_cruise=None,
+        *,
+        alt_stop=None,
+        remove_cruise=True,
+        initial_guess=None,
+        interpolant=None,
+        n_dim=3,
+        time_dependent=False,
+        auto_rescale_objective=False,
+        exact_hessian=False,
+        result_object=False,
+    ) -> pd.DataFrame:
         """Compute the optimal climb trajectory.
 
         Args:
             objective: Optimization objective. Default "fuel".
-            df_cruise: Cruise trajectory for target altitude/mach.
-                If None, computed automatically.
-            **kwargs:
-                alt_stop: Top of climb altitude in feet.
-                remove_cruise: Remove level-off points. Default True.
+            df_cruise: Cruise trajectory for target altitude/mach. If None,
+                computed automatically.
+            alt_stop: Top of climb altitude in feet.
+            remove_cruise: Remove level-off points. Default True.
+            initial_guess: Unused by Climb (accepted for API symmetry).
+            interpolant: CasADi grid-cost interpolant (optional).
+            n_dim: Interpolant input dimension (3 or 4). Default 3.
+            time_dependent: Grid cost is time-dependent. Default False.
+            auto_rescale_objective: Rescale objective to O(1). Default False.
+            exact_hessian: Force IPOPT exact Hessian. Default False.
+            result_object: If True, return a TrajectoryResult.
 
         Returns:
-            pd.DataFrame: Optimized climb trajectory.
+            pd.DataFrame (or TrajectoryResult if result_object=True).
         """
-        alt_stop = kwargs.get("alt_stop", None)
-
         if df_cruise is None:
             if self.debug:
                 print("Finding the preliminary optimal cruise parameters...")
@@ -118,7 +136,16 @@ class Climb(Base):
 
         self.init_conditions(df_cruise, alt_stop=alt_stop)
 
-        X, U = self._build_opti(objective, ts_final_guess=3600, **kwargs)
+        _kwargs = {
+            "initial_guess": initial_guess,
+            "interpolant": interpolant,
+            "n_dim": n_dim,
+            "time_dependent": time_dependent,
+            "auto_rescale_objective": auto_rescale_objective,
+            "exact_hessian": exact_hessian,
+        }
+
+        X, U = self._build_opti(objective, ts_final_guess=3600, **_kwargs)
         opti = self._opti
 
         # --- Phase-specific constraints ---
@@ -169,10 +196,11 @@ class Climb(Base):
         opti.subject_to(climb_range == self.traj_range)
 
         # --- Solve ---
-        df = self._solve(X, U, **kwargs)
+        df = self._solve(X, U, **_kwargs)
 
-        remove_cruise = kwargs.get("remove_cruise", True)
         if remove_cruise:
             df = df.query("vertical_rate > 100")
 
+        if result_object:
+            return self._make_result(df)
         return df

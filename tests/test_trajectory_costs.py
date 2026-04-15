@@ -30,8 +30,22 @@ def test_fuel_cost_sum_matches_mass_difference(cruise_small_nodes_df):
     assert abs(fuel_cost_sum - mass_diff) / mass_diff < 0.1
 
 
-def test_kwargs_passed_through_cruise(aircraft_type, short_flight):
-    """Passing an extra kwarg (interpolant=None) must not raise."""
+def test_unknown_kwarg_raises_type_error(aircraft_type, short_flight):
+    """Unknown kwargs are rejected by the explicit-keyword signature."""
+    optimizer = top.Cruise(
+        aircraft_type,
+        short_flight["origin"],
+        short_flight["destination"],
+        short_flight["m0"],
+    )
+    optimizer.setup(nodes=20)
+    with pytest.raises(TypeError):
+        optimizer.trajectory(objective="fuel", nonsense_kwarg=42)
+
+
+def test_interpolant_none_ok(aircraft_type, short_flight):
+    """interpolant=None is a recognised kwarg and must produce a
+    DataFrame with fuel_cost and grid_cost columns."""
     optimizer = top.Cruise(
         aircraft_type,
         short_flight["origin"],

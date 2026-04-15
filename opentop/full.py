@@ -72,29 +72,55 @@ class CompleteFlight(Base):
         # Control - guesses
         self.u_guess = [0.6, 1000 * fpm, psi]
 
-    def trajectory(self, objective="fuel", **kwargs) -> pd.DataFrame:
+    def trajectory(
+        self,
+        objective="fuel",
+        *,
+        max_fuel=None,
+        return_failed=False,
+        initial_guess=None,
+        remove_cruise=False,
+        interpolant=None,
+        n_dim=3,
+        time_dependent=False,
+        auto_rescale_objective=False,
+        exact_hessian=False,
+        result_object=False,
+    ) -> pd.DataFrame:
         """Compute the optimal complete flight trajectory.
 
         Args:
             objective: Optimization objective. Default "fuel".
-            **kwargs:
-                max_fuel: Maximum fuel constraint (kg).
-                initial_guess: DataFrame to use as initial guess.
-                return_failed: Return result even if optimization fails.
+            max_fuel: Maximum fuel constraint (kg).
+            return_failed: Return result even if optimization fails.
+            initial_guess: DataFrame to use as initial guess.
+            remove_cruise: Unused for complete flight (accepted for API symmetry).
+            interpolant: CasADi grid-cost interpolant (optional).
+            n_dim: Interpolant input dimension (3 or 4). Default 3.
+            time_dependent: Grid cost is time-dependent. Default False.
+            auto_rescale_objective: Rescale objective to O(1). Default False.
+            exact_hessian: Force IPOPT exact Hessian. Default False.
+            result_object: If True, return a TrajectoryResult.
 
         Returns:
-            pd.DataFrame: Optimized trajectory.
+            pd.DataFrame (or TrajectoryResult if result_object=True).
         """
-        self.init_conditions(**kwargs)
+        _kwargs = {
+            "initial_guess": initial_guess,
+            "interpolant": interpolant,
+            "n_dim": n_dim,
+            "time_dependent": time_dependent,
+            "auto_rescale_objective": auto_rescale_objective,
+            "exact_hessian": exact_hessian,
+        }
+        self.init_conditions(**_kwargs)
 
-        initial_guess = kwargs.get("initial_guess", None)
         if initial_guess is not None:
             self.x_guess = self.initial_guess(initial_guess)
 
-        customized_max_fuel = kwargs.get("max_fuel", None)
-        return_failed = kwargs.get("return_failed", False)
+        customized_max_fuel = max_fuel
 
-        X, U = self._build_opti(objective, ts_final_guess=7200, **kwargs)
+        X, U = self._build_opti(objective, ts_final_guess=7200, **_kwargs)
         opti = self._opti
 
         # --- Phase-specific constraints ---
@@ -171,7 +197,7 @@ class CompleteFlight(Base):
             opti.subject_to(X[0][3] - X[-1][3] <= customized_max_fuel)
 
         # --- Solve ---
-        df = self._solve(X, U, **kwargs)
+        df = self._solve(X, U, **_kwargs)
         df_copy = df.copy()
 
         if not self.solver.stats()["success"]:
@@ -191,6 +217,8 @@ class CompleteFlight(Base):
                 df = None
 
         if return_failed:
-            return df_copy
+            df = df_copy
 
+        if result_object:
+            return self._make_result(df)
         return df
