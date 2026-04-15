@@ -14,7 +14,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-04-07T19:47:47.126049141Z"
+exclude-newer = "2026-04-08T13:09:01.829810733Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -916,7 +916,7 @@ wheels = [
 
 [[package]]
 name = "opentop"
-version = "2.0.2"
+version = "2.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "cartopy" },
