@@ -707,7 +707,9 @@ class Base:
             ),
             grid_cost=(
                 float(df["grid_cost"].sum(skipna=True))
-                if has_df and "grid_cost" in df.columns
+                if has_df
+                and "grid_cost" in df.columns
+                and df["grid_cost"].notna().any()
                 else float("nan")
             ),
             stats=stats,
