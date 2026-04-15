@@ -4,7 +4,6 @@ from typing import Optional, Union
 import casadi as ca
 import xarray as xr
 from sklearn.linear_model import Ridge
-from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import PolynomialFeatures
 
 import numpy as np
@@ -60,14 +59,16 @@ def make_projection(lat1, lon1, lat2, lon2):
 
 
 class PolyWind:
-    """
-    A class to model wind fields using second order polynomial regression.
+    """Polynomial wind model. Fitted via sklearn Ridge + PolynomialFeatures(2).
+
+    Works with both numeric inputs (returns float) and CasADi symbolic inputs
+    (SX/MX — returns a symbolic expression usable inside an NLP).
     """
 
-    def __init__(self, windfield: pd.DataFrame, proj, lat1, lon1, lat2, lon2, margin=5):
-        self.wind = windfield
+    def __init__(self, wind, proj, lat1, lon1, lat2, lon2, margin=1.5):
+        self.wind = wind
+        self.proj = proj
 
-        # select region based on airports
         df = (
             self.wind.query(f"longitude <= {max(lon1, lon2) + margin}")
             .query(f"longitude >= {(min(lon1, lon2)) - margin}")
@@ -75,40 +76,52 @@ class PolyWind:
             .query(f"latitude >= {min(lat1, lat2) - margin}")
             .query("h <= 13000")
         )
-
         x, y = proj(df.longitude, df.latitude)
-
         df = df.assign(x=x, y=y)
 
-        model = make_pipeline(PolynomialFeatures(2), Ridge())
-        model.fit(df[["x", "y", "h", "ts"]], df[["u", "v"]])
+        self._poly = PolynomialFeatures(2)
+        X_train = df[["x", "y", "h", "ts"]].values
+        self._poly.fit(X_train)
+        ridge = Ridge()
+        ridge.fit(self._poly.transform(X_train), df[["u", "v"]].values)
+        self._coef = ridge.coef_          # shape (2, n_features)
+        self._intercept = ridge.intercept_  # shape (2,)
 
-        features = model["polynomialfeatures"].get_feature_names_out()
-        features = [string.replace("^", "**") for string in features]
-        features = [string.replace(" ", "*") for string in features]
-
-        self.features = features
-        self.coef_u, self.coef_v = model["ridge"].coef_
+    def _feature_vec(self, x, y, h, ts):
+        """Build feature row. Polymorphic: numeric → np.ndarray; CasADi → list of SX/MX."""
+        if isinstance(x, (ca.SX, ca.MX, ca.DM)):
+            powers = self._poly.powers_   # (n_features, 4)
+            feats = []
+            for row in powers:
+                term = 1
+                for var, p in zip((x, y, h, ts), row):
+                    if p == 0:
+                        continue
+                    term = term * (var ** int(p))
+                feats.append(term)
+            return feats
+        else:
+            return self._poly.transform(np.array([[x, y, h, ts]], dtype=float))[0]
 
     def calc_u(self, x, y, h, ts):
         """Compute eastward wind component (m/s) at given position."""
-        u = sum(
-            [
-                eval(f, {}, {"x": x, "y": y, "h": h, "ts": ts}) * c
-                for (f, c) in zip(self.features, self.coef_u)
-            ]
-        )
-        return u
+        feats = self._feature_vec(x, y, h, ts)
+        if isinstance(x, (ca.SX, ca.MX, ca.DM)):
+            expr = self._intercept[0]
+            for c, f in zip(self._coef[0], feats):
+                expr = expr + c * f
+            return expr
+        return float(np.dot(self._coef[0], feats) + self._intercept[0])
 
     def calc_v(self, x, y, h, ts):
         """Compute northward wind component (m/s) at given position."""
-        v = sum(
-            [
-                eval(f, {}, {"x": x, "y": y, "h": h, "ts": ts}) * c
-                for (f, c) in zip(self.features, self.coef_v)
-            ]
-        )
-        return v
+        feats = self._feature_vec(x, y, h, ts)
+        if isinstance(x, (ca.SX, ca.MX, ca.DM)):
+            expr = self._intercept[1]
+            for c, f in zip(self._coef[1], feats):
+                expr = expr + c * f
+            return expr
+        return float(np.dot(self._coef[1], feats) + self._intercept[1])
 
 
 def construct_interpolant(
