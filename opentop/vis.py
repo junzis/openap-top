@@ -8,7 +8,7 @@ from matplotlib.gridspec import GridSpec
 import numpy as np
 from openap import aero
 
-def map(df, windfield=None, ax=None, barb_steps=10):
+def plot_map(df, windfield=None, ax=None, barb_steps=10):
     """Plot trajectory on a map with optional wind barbs.
 
     Args:
@@ -139,7 +139,7 @@ def trajectory(df, windfield=None, barb_steps=10):
         ),
     )
 
-    map(df, windfield, ax=ax5, barb_steps=barb_steps)
+    plot_map(df, windfield, ax=ax5, barb_steps=barb_steps)
 
     plt.tight_layout()
 

@@ -106,8 +106,11 @@ def obj_ci(
 
 # ---- Climate ----
 
-# Climate metric coefficients: (h2o, nox, sox, soot)
-# CO2 coefficient is always 1.
+# Climate impact coefficients per species (NOx, H2O, SOx, contrails, CO2) for
+# each GWP/GTP horizon. Values taken from OpenAP's climate model; see
+# Grewe & Stenke (2008) and Grewe et al. (2014) for the source derivations.
+# These coefficients are for *cruise-phase* emissions.
+# Tuple layout: (h2o, nox, sox, soot). CO2 coefficient is always 1.
 _CLIMATE_COEFF: dict[str, tuple] = {
     "gwp20": (0.22, 619, -832, 4288),
     "gwp50": (0.1, 205, -392, 2018),

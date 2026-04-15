@@ -207,6 +207,11 @@ def _parse_time_window(time_arg: str) -> tuple[pd.Timestamp, pd.Timestamp]:
     return t0, t1  # type: ignore[return-value]  # pd.Timestamp() stubs widen to NaT
 
 
+# Target altitudes (ft) used by _pad_altitudes to extend grid coverage from
+# 0 to FL480 in 2000 ft steps.  Private to this module.
+_PAD_ALTITUDES_FT: list[float] = [float(a) for a in range(0, 49_000, 2000)]
+
+
 def _pad_altitudes(df: pd.DataFrame) -> pd.DataFrame:
     """Add zero-cost rows at altitudes outside the existing grid band.
 
@@ -217,9 +222,8 @@ def _pad_altitudes(df: pd.DataFrame) -> pd.DataFrame:
     """
     from openap.aero import ft
 
-    TARGET_ALTITUDES = [float(a) for a in range(0, 49_000, 2000)]
     existing = set(df.altitude.unique())
-    missing = [a for a in TARGET_ALTITUDES if a not in existing]
+    missing = [a for a in _PAD_ALTITUDES_FT if a not in existing]
     if not missing:
         return df
 

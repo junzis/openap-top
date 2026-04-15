@@ -31,6 +31,17 @@ class Climb(Base):
         use_synonym: bool = False,
         dT: float = 0.0,
     ) -> None:
+        """Climb phase trajectory optimizer.
+
+        Args:
+            actype: ICAO aircraft type code.
+            origin: ICAO/IATA airport code or (lat, lon) tuple.
+            destination: ICAO/IATA airport code or (lat, lon) tuple.
+            m0: Takeoff mass factor (fraction of MTOW). Default 0.85.
+            engine: Engine type override. Defaults to aircraft default.
+            use_synonym: Use aircraft type synonym. Default False.
+            dT: ISA temperature deviation (K). Default 0.
+        """
         super().__init__(
             actype,
             origin,
@@ -58,7 +69,7 @@ class Climb(Base):
             alt_stop: Stop altitude in feet. If provided, used instead of df_cruise.
         """
 
-        # Convert lat/lon to cartisian coordinates.
+        # Convert lat/lon to Cartesian coordinates.
         xp_0, yp_0 = self.proj(self.lon1, self.lat1)
         xp_f, yp_f = self.proj(self.lon2, self.lat2)
         x_min, x_max, y_min, y_max = self._compute_bbox()

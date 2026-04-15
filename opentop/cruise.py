@@ -64,7 +64,7 @@ class Cruise(Base):
     def init_conditions(self, **kwargs: Any) -> None:
         """Initialize direct collocation bounds and guesses."""
 
-        # Convert lat/lon to cartisian coordinates.
+        # Convert lat/lon to Cartesian coordinates.
         xp_0, yp_0 = self.proj(self.lon1, self.lat1)
         xp_f, yp_f = self.proj(self.lon2, self.lat2)
         x_min, x_max, y_min, y_max = self._compute_bbox()
