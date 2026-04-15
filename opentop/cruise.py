@@ -43,10 +43,7 @@ class Cruise(Base):
         # Convert lat/lon to cartisian coordinates.
         xp_0, yp_0 = self.proj(self.lon1, self.lat1)
         xp_f, yp_f = self.proj(self.lon2, self.lat2)
-        x_min = min(xp_0, xp_f) - 10_000
-        x_max = max(xp_0, xp_f) + 10_000
-        y_min = min(yp_0, yp_f) - 10_000
-        y_max = max(yp_0, yp_f) + 10_000
+        x_min, x_max, y_min, y_max = self._compute_bbox()
 
         ts_min = 0
         ts_max = max(5, self.range / 1000 / 500) * 3600
@@ -54,8 +51,7 @@ class Cruise(Base):
         h_max = kwargs.get("h_max", self.aircraft["limits"]["ceiling"])
         h_min = kwargs.get("h_min", 15_000 * ft)
 
-        hdg = oc.geo.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
-        psi = hdg * pi / 180
+        psi = self._compute_bearing_psi()
 
         # Initial conditions - Lower upper bounds
         self.x_0_lb = [xp_0, yp_0, h_min, self.mass_init, ts_min]

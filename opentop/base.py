@@ -211,6 +211,24 @@ class Base:
             lat, lon = geo.latlon(lat0, lon0, distances, bearing)
             return lon, lat
 
+    def _compute_bbox(self, margin_m: float = 10_000):
+        """Compute projected bounding box around origin/destination with margin.
+
+        Returns (x_min, x_max, y_min, y_max) in projected meters.
+        """
+        xp_0, yp_0 = self.proj(self.lon1, self.lat1)
+        xp_f, yp_f = self.proj(self.lon2, self.lat2)
+        x_min = min(xp_0, xp_f) - margin_m
+        x_max = max(xp_0, xp_f) + margin_m
+        y_min = min(yp_0, yp_f) - margin_m
+        y_max = max(yp_0, yp_f) + margin_m
+        return x_min, x_max, y_min, y_max
+
+    def _compute_bearing_psi(self) -> float:
+        """Great-circle bearing from origin to destination, in radians."""
+        hdg = oc.geo.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
+        return hdg * np.pi / 180
+
     def initial_guess(self, flight: pd.DataFrame = None):
         """Generate initial guess for the optimizer.
 
