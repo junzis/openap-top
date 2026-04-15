@@ -2,6 +2,7 @@ tmp
 debug/
 /test*.py
 docs/superpowers/
+docs/design/
 tests/benchmarks/
 debug/scaling/investigation/
 

@@ -150,6 +150,28 @@ def my_objective(x, u, dt, **kwargs):
 flight = optimizer.trajectory(objective=my_objective)
 ```
 
+### Multi-start optimization for non-convex objectives
+
+Trajectory optimization with grid costs, blended objectives, or tight constraints can have multiple local minima — a single solve lands in whichever basin is closest to the initial guess. For problems where robustness matters, `multi_start_trajectory` runs N solves from different randomized initial guesses and returns the best:
+
+```python
+trajectory, candidates = optimizer.multi_start_trajectory(
+    objective=contrail_objective,
+    interpolant=interp,
+    max_fuel=6500,
+    n_starts=5,
+    lateral_jitter_km=100.0,
+    altitude_jitter_ft=3000.0,
+    seed=0,
+)
+```
+
+Start 0 uses the canonical initial guess (your `initial_guess=` if provided, otherwise the default great-circle). Starts 1..N-1 are random perturbations of the canonical: sinusoidal lateral bulges (endpoints preserved) and constant altitude offsets.
+
+Returned is a `(trajectory, candidates)` tuple. `trajectory` is the winning DataFrame (feasibility-first, then lowest objective). `candidates` is a best-first ordered list of dicts with per-start metadata (`objective`, `fuel`, `grid_cost`, `success`, `iters`, `perturbation`, `wall_time_s`, `trajectory`).
+
+`n_starts=1` is identical to calling `trajectory()` directly, so adding `multi_start_trajectory` to existing code is additive.
+
 ### Precomputed grid caches (recommended for contrail + CO₂)
 
 Linear interpolation over a 4D contrail-cost grid has discontinuous derivatives at every grid cell boundary, which can cause IPOPT's line search to oscillate on non-convex blended objectives. The fix is to use a cubic B-spline interpolant, which has continuous derivatives. But building a bspline over a large grid can take several minutes, so we expose a cache utility:
