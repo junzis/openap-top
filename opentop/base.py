@@ -64,12 +64,13 @@ def _perturb_guess(df, lateral_km, altitude_ft, proj):
             lat_new = np.asarray(lat_new, dtype=float)
             # Restore endpoints exactly. Mathematically sin(0) = sin(pi) = 0,
             # but IEEE 754 doubles give sin(np.pi) ~= 1.2e-16. Multiplied by
-            # lateral_km * 1000 that residual propagates through the custom
-            # truncated-pi projection in self.proj (openap.aero hardcodes
-            # truncated-π in openap.aero's bearing calc) and emerges as ~1e-5 degrees / ~3 m at the destination.
-            # Zeroing offset_m[0] and offset_m[-1] before the call does NOT
-            # help because the projection's round-trip error is independent
-            # of the offset magnitude — the endpoints must be clamped here.
+            # lateral_km * 1000 that residual is ~1e-16 km (IEEE 754 only,
+            # since base.py::proj uses np.pi); endpoint clamping defends
+            # against potential pyproj round-trip error for non-identity
+            # projections. Zeroing offset_m[0] and offset_m[-1] before the
+            # call does NOT help because the projection's round-trip error is
+            # independent of the offset magnitude — the endpoints must be
+            # clamped here.
             lon_new[0] = lon[0]
             lat_new[0] = lat[0]
             lon_new[-1] = lon[-1]

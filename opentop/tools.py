@@ -65,8 +65,8 @@ class PolyWind:
     (SX/MX — returns a symbolic expression usable inside an NLP).
     """
 
-    def __init__(self, wind, proj, lat1, lon1, lat2, lon2, margin=1.5):
-        self.wind = wind
+    def __init__(self, windfield: pd.DataFrame, proj, lat1, lon1, lat2, lon2, margin=5):
+        self.wind = windfield
         self.proj = proj
 
         df = (
