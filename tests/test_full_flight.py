@@ -1,4 +1,4 @@
-"""Tests for CompleteFlight and MultiPhase trajectory optimizers."""
+"""Tests for CompleteFlight trajectory optimizer."""
 
 import pytest
 
@@ -25,18 +25,6 @@ def complete_flight_medium_df(aircraft_type, medium_flight):
         medium_flight["m0"],
     )
     return optimizer.trajectory(objective="fuel")
-
-
-@pytest.fixture(scope="module")
-def multiphase_result(aircraft_type, medium_flight):
-    optimizer = top.MultiPhase(
-        aircraft_type,
-        medium_flight["origin"],
-        medium_flight["destination"],
-        medium_flight["m0"],
-    )
-    df = optimizer.trajectory(objective="fuel")
-    return optimizer, df
 
 
 class TestCompleteFlight:
@@ -73,27 +61,3 @@ class TestCompleteFlight:
         assert df is not None
         assert len(df) > 0
 
-
-class TestMultiPhase:
-    def test_valid_trajectory(self, multiphase_result):
-        _, df = multiphase_result
-        assert df is not None
-        assert len(df) > 0
-        assert "altitude" in df.columns
-
-    def test_starts_and_ends_low(self, multiphase_result):
-        _, df = multiphase_result
-        assert df.altitude.iloc[0] < 5000
-        assert df.altitude.iloc[-1] < 1000
-
-    def test_mass_decreases(self, multiphase_result):
-        _, df = multiphase_result
-        assert df.mass.iloc[-1] < df.mass.iloc[0]
-
-    def test_solver_stats(self, multiphase_result):
-        optimizer, _ = multiphase_result
-        stats = optimizer.get_solver_stats()
-        assert isinstance(stats, dict)
-        assert "climb" in stats
-        assert "cruise" in stats
-        assert "descent" in stats

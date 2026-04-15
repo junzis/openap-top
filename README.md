@@ -81,9 +81,6 @@ optimizer = opentop.CompleteFlight(
 cruise    = opentop.Cruise("A320", "EHAM", "LGAV", m0=0.85).trajectory()
 climb     = opentop.Climb("A320", "EHAM", "LGAV", m0=0.85).trajectory()
 descent   = opentop.Descent("A320", "EHAM", "LGAV", m0=0.85).trajectory()
-
-# Multi-phase: optimizes climb, cruise, descent sequentially
-full = opentop.MultiPhase("A320", "EHAM", "LGAV", m0=0.85).trajectory()
 ```
 
 `Cruise` also supports constant-altitude, constant-Mach, and fixed-track modes:

@@ -15,7 +15,6 @@ destination = "LGAV"
 m0 = 0.85
 
 optimizer = top.CompleteFlight(actype, origin, destination, m0)
-# optimizer = top.MultiPhase(actype, origin, destination, m0)
 # optimizer = top.Cruise(actype, origin, destination, m0)
 # optimizer = top.Climb(actype, origin, destination, m0)
 # optimizer = top.Descent(actype, origin, destination, m0)

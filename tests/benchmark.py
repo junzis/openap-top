@@ -165,8 +165,6 @@ def run_benchmarks():
          lambda: top.CompleteFlight("A320", "EHAM", "EDDF", 0.85), "fuel"),
         ("complete_medium_fuel",
          lambda: top.CompleteFlight("A320", "EHAM", "LGAV", 0.85), "fuel"),
-        ("multiphase_medium_fuel",
-         lambda: top.MultiPhase("A320", "EHAM", "LGAV", 0.85), "fuel"),
     ]
 
     for label, factory, objective in cases:

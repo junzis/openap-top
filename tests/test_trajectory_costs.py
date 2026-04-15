@@ -30,10 +30,6 @@ def test_fuel_cost_sum_matches_mass_difference(cruise_small_nodes_df):
     assert abs(fuel_cost_sum - mass_diff) / mass_diff < 0.1
 
 
-def test_multiphase_has_get_solver_stats():
-    assert hasattr(top.MultiPhase, "get_solver_stats")
-
-
 def test_kwargs_passed_through_cruise(aircraft_type, short_flight):
     """Passing an extra kwarg (interpolant=None) must not raise."""
     optimizer = top.Cruise(
