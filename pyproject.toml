@@ -66,6 +66,9 @@ select = [
 known-first-party = ["numpy", "pandas", "pyproj"]
 
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.hatch.build.targets.wheel]
 universal = true
 packages = ["opentop"]
