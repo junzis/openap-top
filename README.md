@@ -267,6 +267,30 @@ Run benchmarks across versions to verify performance:
 
 Reports land in `tests/benchmarks/<version>.txt`.
 
+## Migrating to 2.2
+
+Version 2.2 makes several structural changes that may require small updates to existing code:
+
+| v2.1 | v2.2 |
+|---|---|
+| `opentop.MultiPhase(...)` | `opentop.CompleteFlight(...)` — `MultiPhase` has been removed |
+| `trajectory(objective="fuel", foo=bar)` silently tolerates unknown kwargs | Unknown kwargs raise `TypeError`; only documented names are accepted |
+| `optimizer.solver.stats()` | `optimizer.stats` (dict) or `optimizer.success` (bool) |
+| `opentop.vis.map(df, ...)` | `opentop.vis.plot_map(df, ...)` |
+| — | New: `trajectory(..., result_object=True)` returns a `TrajectoryResult` dataclass |
+
+Internally, `opentop/` has been split into focused modules: `_dynamics.py`, `_objectives.py`, `_trajectory.py`, `_options.py`, `_multi_start.py`. If you were importing internal helpers, they have moved — use the public API on `Base` / `Cruise` / `CompleteFlight` where possible.
+
+`MultiPhase` was rarely used and its functionality is fully covered by `CompleteFlight`. If you had code using `MultiPhase`, replace it with:
+
+```python
+full = opentop.CompleteFlight("A320", "EHAM", "LGAV", m0=0.85).trajectory()
+```
+
+`optimizer.solver` still works in v2.2 with a `DeprecationWarning`. It will be removed in v2.3 — prefer `optimizer.stats` / `optimizer.success`.
+
+Type annotations are now enforced in CI via pyright (basic mode). Public API signatures are fully annotated; see `opentop/_options.py` for the new `SolveOptions`, `GridOptions`, and `TrajectoryResult` dataclasses.
+
 ## What's New in 2.0
 
 Version 2.0 is a major refactor. Most user code keeps the same shape, but a few things have moved:
