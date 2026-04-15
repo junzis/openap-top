@@ -15,6 +15,8 @@ try:
 except ImportError:
     warnings.warn("cfgrib and sklearn are required for wind integration")
 
+from . import _dynamics
+
 
 def _perturb_guess(df, lateral_km, altitude_ft, proj):
     """Perturb a canonical initial-guess DataFrame.
@@ -220,30 +222,14 @@ class Base:
             np.ndarray: Array of shape (nodes+1, 5) with columns
                 [xp, yp, h, mass, ts].
         """
-        m_guess = self.mass_init * np.ones(self.nodes + 1)
-        ts_guess = np.linspace(0, 6 * 3600, self.nodes + 1)
-
-        if flight is None:
-            h_cr = self.aircraft["cruise"]["height"]
-            xp_0, yp_0 = self.proj(self.lon1, self.lat1)
-            xp_f, yp_f = self.proj(self.lon2, self.lat2)
-            xp_guess = np.linspace(xp_0, xp_f, self.nodes + 1)
-            yp_guess = np.linspace(yp_0, yp_f, self.nodes + 1)
-            h_guess = h_cr * np.ones(self.nodes + 1)
-        else:
-            xp_guess, yp_guess = self.proj(flight.longitude, flight.latitude)
-            h_guess = flight.altitude * ft
-            if "mass" in flight:
-                m_guess = flight.mass
-
-            if "ts" in flight:
-                ts_guess = flight.ts
-            elif "timestamp" in flight:
-                ts_guess = (
-                    flight.timestamp - flight.timestamp.min()
-                ).dt.total_seconds()
-
-        return np.vstack([xp_guess, yp_guess, h_guess, m_guess, ts_guess]).T
+        return _dynamics.great_circle_init(
+            self.lat1, self.lon1, self.lat2, self.lon2,
+            n_nodes=self.nodes,
+            mass_init=self.mass_init,
+            aircraft=self.aircraft,
+            proj=self.proj,
+            flight=flight,
+        )
 
     def enable_wind(self, windfield: pd.DataFrame):
         """Enable wind field integration using polynomial regression model.
@@ -262,39 +248,7 @@ class Base:
             tuple: (C, D, B) where C is the derivative matrix,
                 D is the continuity vector, B is the quadrature vector.
         """
-        # Get collocation points using Legendre polynomials
-        tau_root = np.append(0, ca.collocation_points(self.polydeg, "legendre"))
-
-        # C[i,j] = time derivative of Lagrange polynomial i evaluated at collocation point j
-        C = np.zeros((self.polydeg + 1, self.polydeg + 1))
-
-        # D[j] = Lagrange polynomial j evaluated at final time (t=1)
-        D = np.zeros(self.polydeg + 1)
-
-        # B[j] = integral of Lagrange polynomial j from 0 to 1
-        B = np.zeros(self.polydeg + 1)
-
-        # For each collocation point, construct Lagrange polynomial and calculate coefficients
-        for j in range(self.polydeg + 1):
-            # Construct Lagrange polynomial that is 1 at tau_root[j] and 0 at tau_root[r] where r != j
-            p = np.poly1d([1])
-            for r in range(self.polydeg + 1):
-                if r != j:
-                    p *= np.poly1d([1, -tau_root[r]]) / (tau_root[j] - tau_root[r])
-
-            # Evaluate polynomial at t=1 for continuity constraints
-            D[j] = p(1.0)
-
-            # Get time derivative coefficients for collocation constraints
-            pder = np.polyder(p)
-            for r in range(self.polydeg + 1):
-                C[j, r] = pder(tau_root[r])
-
-            # Get integral coefficients for cost function quadrature
-            pint = np.polyint(p)
-            B[j] = pint(1.0)
-
-        return C, D, B
+        return _dynamics.collocation_coeff(self.polydeg)
 
     def xdot(self, x, u) -> ca.MX:
         """State derivatives for the equations of motion.
@@ -306,27 +260,12 @@ class Base:
         Returns:
             ca.MX: State derivatives [dx, dy, dh, dm, dt].
         """
-        xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
-        mach, vs, psi = u[0], u[1], u[2]
-
-        v = oc.aero.mach2tas(mach, h, dT=self.dT)
-        gamma = ca.arctan2(vs, v)
-
-        dx = v * ca.sin(psi) * ca.cos(gamma)
-        if self.wind is not None:
-            dx += self.wind.calc_u(xp, yp, h, ts)
-
-        dy = v * ca.cos(psi) * ca.cos(gamma)
-        if self.wind is not None:
-            dy += self.wind.calc_v(xp, yp, h, ts)
-
-        dh = vs
-
-        dm = -self.fuelflow.enroute(m, v / kts, h / ft, vs / fpm, dT=self.dT)
-
-        dt = 1
-
-        return ca.vertcat(dx, dy, dh, dm, dt)
+        return _dynamics.xdot(
+            x, u,
+            fuelflow=self.fuelflow,
+            dT=self.dT,
+            wind=self.wind,
+        )
 
     def setup(
         self,
