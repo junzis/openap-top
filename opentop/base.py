@@ -15,7 +15,7 @@ try:
 except ImportError:
     warnings.warn("cfgrib and sklearn are required for wind integration")
 
-from . import _dynamics, _objectives
+from . import _dynamics, _objectives, _trajectory
 
 
 def _perturb_guess(df, lateral_km, altitude_ft, proj):
@@ -659,104 +659,28 @@ class Base:
         Returns:
             pd.DataFrame: Trajectory with columns including fuel_cost and grid_cost
         """
-        interpolant = kwargs.get("interpolant", None)
-        time_dependent = kwargs.get("time_dependent", True)
-        n_dim = kwargs.get("n_dim")
-        if n_dim is None:
-            n_dim = interpolant.size1_in(0) if interpolant is not None else 3
-        if n_dim not in (3, 4):
-            raise ValueError(f"n_dim must be 3 or 4, got {n_dim}")
-
-        X = x_opt if isinstance(x_opt, np.ndarray) else x_opt.full()
-        U = u_opt if isinstance(u_opt, np.ndarray) else u_opt.full()
-
-        # Extrapolate the final control point, Uf
-        U2 = U[:, -2:-1]
-        U1 = U[:, -1:]
-        Uf = U1 + (U1 - U2)
-
-        U = np.append(U, Uf, axis=1)
-        n = self.nodes + 1
-
+        # Historically to_trajectory accepted arbitrary kwargs (via
+        # kwargs.get) and silently ignored unknowns; preserve that contract
+        # by passing only the recognised ones through to the pure helper.
+        df, X, U, dt = _trajectory.to_dataframe(
+            ts_final,
+            x_opt,
+            u_opt,
+            proj=self.proj,
+            nodes=self.nodes,
+            dT=self.dT,
+            wind=self.wind,
+            actype=self.actype,
+            engtype=self.engtype,
+            use_synonym=self.use_synonym,
+            interpolant=kwargs.get("interpolant", None),
+            time_dependent=kwargs.get("time_dependent", True),
+            n_dim=kwargs.get("n_dim"),
+        )
+        # Preserve historical side effects for downstream callers/tests.
         self.X = X
         self.U = U
-        self.dt = ts_final / (n - 1)
-
-        xp, yp, h, mass, ts = X
-        mach, vs, psi = U
-        lon, lat = self.proj(xp, yp, inverse=True)
-        ts_ = np.linspace(0, ts_final, n).round(4)
-        tas = (openap.aero.mach2tas(mach, h, dT=self.dT) / kts).round(4)
-        alt = (h / ft).round()
-        vertrate = (vs / fpm).round()
-
-        # Per-segment fuel cost derived directly from the mass trajectory.
-        # mass[k] - mass[k+1] is the exact fuel burnt on the [k, k+1] interval
-        # as enforced by the collocation dynamics (higher-order quadrature);
-        # this guarantees `fuel_cost.sum() == m0 - m_final` up to floating
-        # point. Recomputing via obj_fuel() would use left-endpoint rectangular
-        # quadrature and disagree with the physical fuel burn.
-        fuel_cost = np.append(-np.diff(mass), np.nan)
-
-        # Grid cost has no state-based equivalent; integrate left-endpoint
-        # over the N intervals and pad the terminal row with NaN.
-        if interpolant is not None:
-            grid_cost_seg = np.asarray(
-                self.obj_grid_cost(
-                    X[:, :-1],
-                    U[:, :-1],
-                    self.dt,
-                    interpolant=interpolant,
-                    time_dependent=time_dependent,
-                    n_dim=n_dim,
-                    symbolic=False,
-                )
-            ).ravel()
-            grid_cost = np.append(grid_cost_seg, np.nan)
-        else:
-            grid_cost = np.full(n, np.nan)
-
-        df = pd.DataFrame(
-            dict(
-                mass=mass,
-                ts=ts_,
-                x=xp,
-                y=yp,
-                h=h,
-                latitude=lat,
-                longitude=lon,
-                altitude=alt,
-                mach=mach.round(6),
-                tas=tas,
-                vertical_rate=vertrate,
-                heading=(np.rad2deg(psi) % 360).round(4),
-                fuel_cost=fuel_cost,
-                grid_cost=grid_cost,
-            )
-        )
-
-        fuelflow = openap.FuelFlow(
-            self.actype,
-            self.engtype,
-            use_synonym=self.use_synonym,
-            force_engine=True,
-        )
-
-        df = df.assign(
-            fuelflow=(
-                fuelflow.enroute(
-                    mass=df.mass, tas=tas, alt=alt, vs=vertrate, dT=self.dT
-                )
-            )
-        )
-
-        if self.wind:
-            wu = np.array([self.wind.calc_u(xi, yi, hi, ti)
-                           for xi, yi, hi, ti in zip(xp, yp, h, ts)])
-            wv = np.array([self.wind.calc_v(xi, yi, hi, ti)
-                           for xi, yi, hi, ti in zip(xp, yp, h, ts)])
-            df = df.assign(wu=wu, wv=wv)
-
+        self.dt = dt
         return df
 
     def multi_start_trajectory(
