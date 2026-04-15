@@ -836,8 +836,10 @@ class Base:
         )
 
         if self.wind:
-            wu = self.wind.calc_u(xp, yp, h, ts)
-            wv = self.wind.calc_v(xp, yp, h, ts)
+            wu = np.array([self.wind.calc_u(xi, yi, hi, ti)
+                           for xi, yi, hi, ti in zip(xp, yp, h, ts)])
+            wv = np.array([self.wind.calc_v(xi, yi, hi, ti)
+                           for xi, yi, hi, ti in zip(xp, yp, h, ts)])
             df = df.assign(wu=wu, wv=wv)
 
         return df
