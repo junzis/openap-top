@@ -5,13 +5,17 @@ classes delegate to these.
 """
 from __future__ import annotations
 
+from typing import Any
+
 import casadi as ca
 import numpy as np
 import openap.casadi as oc
 from openap.aero import fpm, ft, kts
 
+from ._types import Symbolic
 
-def collocation_coeff(polydeg):
+
+def collocation_coeff(polydeg: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Compute Legendre collocation coefficients.
 
     Returns:
@@ -53,7 +57,14 @@ def collocation_coeff(polydeg):
     return C, D, B
 
 
-def xdot(x, u, *, fuelflow, dT, wind=None):
+def xdot(
+    x: Symbolic,
+    u: Symbolic,
+    *,
+    fuelflow: Any,
+    dT: Symbolic,
+    wind: Any = None,
+) -> ca.MX:
     """State derivatives for the equations of motion. Pure.
 
     Args:
@@ -66,8 +77,8 @@ def xdot(x, u, *, fuelflow, dT, wind=None):
     Returns:
         ca.MX: State derivatives [dx, dy, dh, dm, dt].
     """
-    xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
-    mach, vs, psi = u[0], u[1], u[2]
+    xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]  # type: ignore[index]  # Symbolic includes float but x is always array-like at runtime
+    mach, vs, psi = u[0], u[1], u[2]  # type: ignore[index]
 
     v = oc.aero.mach2tas(mach, h, dT=dT)
     gamma = ca.arctan2(vs, v)
@@ -86,14 +97,21 @@ def xdot(x, u, *, fuelflow, dT, wind=None):
 
     dt = 1
 
-    return ca.vertcat(dx, dy, dh, dm, dt)
+    return ca.vertcat(dx, dy, dh, dm, dt)  # type: ignore[return-value]  # casadi stubs widen vertcat to DM|Unknown
 
 
 def great_circle_init(
-    lat1, lon1, lat2, lon2, *,
-    n_nodes, mass_init, aircraft, proj,
-    flight=None,
-):
+    lat1: float,
+    lon1: float,
+    lat2: float,
+    lon2: float,
+    *,
+    n_nodes: int,
+    mass_init: float,
+    aircraft: dict[str, Any],
+    proj: Any,
+    flight: Any = None,
+) -> np.ndarray:
     """Build the great-circle state guess (or interpolate from a flight DataFrame).
 
     Returns np.ndarray of shape (n_nodes+1, 5) with columns [xp, yp, h, mass, ts].

@@ -12,7 +12,7 @@ solver option instead of mutating ``solver_options`` as a side effect.
 """
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable, Union
 
 import casadi as ca
 import numpy as np
@@ -20,7 +20,7 @@ import openap
 import openap.casadi as oc
 from openap.aero import fpm, ft, kts
 
-ObjectiveFn = Callable[..., "ca.MX"]
+from ._types import ObjectiveFn, Symbolic
 
 
 def _mark(fn: ObjectiveFn, *, exact_hessian: bool = False) -> ObjectiveFn:
@@ -33,30 +33,30 @@ def _mark(fn: ObjectiveFn, *, exact_hessian: bool = False) -> ObjectiveFn:
 
 
 def obj_fuel(
-    x,
-    u,
-    dt,
+    x: Symbolic,
+    u: Symbolic,
+    dt: Symbolic,
     *,
-    fuelflow,
-    dT,
-    actype,
-    engtype,
-    use_synonym,
-    symbolic=True,
-    **kwargs,
-):
+    fuelflow: Any,
+    dT: Symbolic,
+    actype: str,
+    engtype: str,
+    use_synonym: bool,
+    symbolic: bool = True,
+    **kwargs: Any,
+) -> ca.MX:
     """Fuel burn objective: fuelflow * dt.
 
     Symbolic path uses the CasADi ``fuelflow`` passed in; non-symbolic path
     builds a numpy ``openap.FuelFlow`` from actype/engtype so callers can
     evaluate the objective on solved numeric trajectories.
     """
-    xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
-    mach, vs, psi = u[0], u[1], u[2]
+    xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]  # type: ignore[index]  # Symbolic includes float but x is always array-like
+    mach, vs, psi = u[0], u[1], u[2]  # type: ignore[index]
 
     if symbolic:
         ff_model = fuelflow
-        v = oc.aero.mach2tas(mach, h, dT=dT)
+        v = oc.aero.mach2tas(mach, h, dT=dT)  # type: ignore[arg-type]  # openap stubs say int, float/symbolic works
     else:
         ff_model = openap.FuelFlow(
             actype,
@@ -64,27 +64,27 @@ def obj_fuel(
             use_synonym=use_synonym,
             force_engine=True,
         )
-        v = openap.aero.mach2tas(mach, h, dT=dT)
+        v = openap.aero.mach2tas(mach, h, dT=dT)  # type: ignore[arg-type]
 
     ff = ff_model.enroute(m, v / kts, h / ft, vs / fpm, dT=dT)
-    return ff * dt
+    return ff * dt  # type: ignore[return-value]  # casadi arithmetic result is MX at NLP time
 
 
-def obj_time(x, u, dt, **kwargs):
+def obj_time(x: Symbolic, u: Symbolic, dt: Symbolic, **kwargs: object) -> ca.MX:
     """Minimum time objective."""
-    return dt
+    return dt  # type: ignore[return-value]  # dt is Symbolic; ca.MX at NLP time
 
 
 def obj_ci(
-    x,
-    u,
-    dt,
+    x: Symbolic,
+    u: Symbolic,
+    dt: Symbolic,
     *,
-    ci,
-    time_price=25,
-    fuel_price=0.8,
-    **kwargs,
-):
+    ci: float,
+    time_price: float = 25,
+    fuel_price: float = 0.8,
+    **kwargs: Any,
+) -> ca.MX:
     """Cost index objective blending time and fuel costs.
 
     Args:
@@ -101,7 +101,7 @@ def obj_ci(
     fuel_cost = fuel * (fuel_price / 0.82)
 
     obj = ci / 100 * time_cost + (1 - ci / 100) * fuel_cost
-    return obj
+    return obj  # type: ignore[return-value]  # arithmetic on Symbolic yields MX at NLP time
 
 
 # ---- Climate ----
@@ -118,7 +118,15 @@ _CLIMATE_COEFF: dict[str, tuple] = {
 }
 
 
-def obj_climate(x, u, dt, *, metric, calc_emission, **kwargs):
+def obj_climate(
+    x: Symbolic,
+    u: Symbolic,
+    dt: Symbolic,
+    *,
+    metric: str,
+    calc_emission: Callable[..., tuple[Symbolic, ...]],
+    **kwargs: Any,
+) -> ca.MX:
     """Climate impact objective using GWP/GTP metric coefficients.
 
     ``calc_emission`` is a callable ``(x, u, **kw) -> (co2, h2o, sox, soot, nox)``
@@ -136,13 +144,20 @@ def obj_climate(x, u, dt, *, metric, calc_emission, **kwargs):
     co2, h2o, sox, soot, nox = calc_emission(x, u, **emit_kwargs)
     c_h2o, c_nox, c_sox, c_soot = _CLIMATE_COEFF[metric]
     cost = co2 + c_h2o * h2o + c_nox * nox + c_sox * sox + c_soot * soot
-    return cost * dt
+    return cost * dt  # type: ignore[return-value]  # arithmetic on Symbolic yields MX at NLP time
 
 
 # ---- Grid cost ----
 
 
-def _obj_grid_cost_impl(x, u, dt, *, proj, **kwargs):
+def _obj_grid_cost_impl(
+    x: Symbolic,
+    u: Symbolic,
+    dt: Symbolic,
+    *,
+    proj: Any,
+    **kwargs: Any,
+) -> ca.MX:
     """Grid-based cost objective using a CasADi interpolant.
 
     Kwargs:
@@ -151,14 +166,17 @@ def _obj_grid_cost_impl(x, u, dt, *, proj, **kwargs):
         n_dim: Input dimension, 3 (lon,lat,h) or 4 (+ts). Default 3.
         time_dependent: Multiply cost by dt. Default True.
     """
-    xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
+    xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]  # type: ignore[index]  # Symbolic includes float but x is always array-like
 
-    interpolant = kwargs.get("interpolant", None)
+    interpolant: Callable[..., Any] | None = kwargs.get("interpolant", None)  # type: ignore[assignment]
     symbolic = kwargs.get("symbolic", True)
     n_dim = kwargs.get("n_dim", 3)
     time_dependent = kwargs.get("time_dependent", True)
     if n_dim not in (3, 4):
         raise ValueError(f"n_dim must be 3 or 4, got {n_dim}")
+
+    if interpolant is None:
+        raise ValueError("obj_grid_cost requires an 'interpolant' keyword argument")
 
     lon, lat = proj(xp, yp, inverse=True, symbolic=symbolic)
 
@@ -172,7 +190,7 @@ def _obj_grid_cost_impl(x, u, dt, *, proj, **kwargs):
     else:
         input_data = np.array(input_data)
 
-    cost = interpolant(input_data)
+    cost: Any = interpolant(input_data)
 
     if not symbolic:
         cost = cost.full()[0]
@@ -180,7 +198,7 @@ def _obj_grid_cost_impl(x, u, dt, *, proj, **kwargs):
     if time_dependent:
         cost *= dt
 
-    return cost
+    return cost  # type: ignore[return-value]  # cost is MX at NLP time, Any typed to allow numeric path
 
 
 # Mark grid-cost as needing exact Hessian so Base can gate the solver option.
@@ -210,7 +228,7 @@ _OBJECTIVES: dict[str, ObjectiveFn] = {
 }
 
 
-def resolve_objective(spec):
+def resolve_objective(spec: str | Callable[..., object]) -> ObjectiveFn:
     """Resolve a user-given spec to an ObjectiveFn.
 
     Accepts:
@@ -223,7 +241,7 @@ def resolve_objective(spec):
         TypeError: for non-str non-callable specs.
     """
     if callable(spec):
-        return spec
+        return spec  # type: ignore[return-value]  # caller's callable may return Any; MX assumed at NLP time
     if isinstance(spec, str):
         if spec.lower().startswith("ci:"):
             try:

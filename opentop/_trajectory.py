@@ -6,6 +6,8 @@ trajectory DataFrame. No CasADi symbolic ops, no solver state; context
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any, Optional
+
 import numpy as np
 import openap
 import pandas as pd
@@ -13,23 +15,26 @@ from openap.aero import fpm, ft, kts
 
 from . import _objectives
 
+if TYPE_CHECKING:
+    from .tools import PolyWind  # forward-ref; avoids circular import
+
 
 def to_dataframe(
-    ts_final,
-    x_opt,
-    u_opt,
+    ts_final: float,
+    x_opt: np.ndarray,
+    u_opt: np.ndarray,
     *,
-    proj,
-    nodes,
-    dT=0.0,
-    wind=None,
-    actype,
-    engtype,
-    use_synonym=False,
-    interpolant=None,
-    time_dependent=True,
-    n_dim=None,
-):
+    proj: Any,
+    nodes: int,
+    dT: float = 0.0,
+    wind: Optional["PolyWind"] = None,
+    actype: str,
+    engtype: str,
+    use_synonym: bool = False,
+    interpolant: Any = None,
+    time_dependent: bool = True,
+    n_dim: Optional[int] = None,
+) -> tuple[pd.DataFrame, np.ndarray, np.ndarray, float]:
     """Build a trajectory DataFrame from numeric states, controls, and final time.
 
     Args:
@@ -75,7 +80,7 @@ def to_dataframe(
     mach, vs, psi = U
     lon, lat = proj(xp, yp, inverse=True)
     ts_ = np.linspace(0, ts_final, n).round(4)
-    tas = (openap.aero.mach2tas(mach, h, dT=dT) / kts).round(4)
+    tas = (openap.aero.mach2tas(mach, h, dT=dT) / kts).round(4)  # type: ignore[arg-type]  # openap stubs say int, float works
     alt = (h / ft).round()
     vertrate = (vs / fpm).round()
 

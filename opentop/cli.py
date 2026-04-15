@@ -14,7 +14,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable, Union, cast
 
 import click
 import pandas as pd
@@ -79,10 +79,10 @@ def parse_objective(spec: str) -> list[tuple[float, str, str | None]]:
 
 
 def build_objective_callable(
-    optimizer,
+    optimizer: Any,
     terms: list[tuple[float, str, str | None]],
-    interpolant=None,
-) -> Callable | str:
+    interpolant: Any = None,
+) -> Union[Callable[..., Any], str]:
     """Build an objective callable (or a built-in string) from parsed terms.
 
     If the spec is a single bare term with weight 1.0 and no grid cost, we
@@ -134,6 +134,7 @@ def build_objective_callable(
             elif name == "time":
                 term = optimizer.obj_time(x, u, dt, **kw)
             elif name == "ci":
+                assert param is not None, "ci term must have a parameter"
                 term = optimizer.obj_ci(x, u, dt, ci=float(param), **kw)
             elif name in {"gwp20", "gwp50", "gwp100", "gtp20", "gtp50", "gtp100"}:
                 term = optimizer._obj_climate(x, u, dt, name, **kw)
@@ -150,7 +151,7 @@ def build_objective_callable(
 # ============================================================
 
 
-def load_grid_file(path: Path):
+def load_grid_file(path: Path) -> Any:
     """Load a grid file.
 
     ``.casadi`` files are loaded directly as pre-built interpolants.
@@ -203,7 +204,7 @@ def _parse_time_window(time_arg: str) -> tuple[pd.Timestamp, pd.Timestamp]:
         t0 = t0.tz_localize("UTC")
     if t1.tzinfo is None:
         t1 = t1.tz_localize("UTC")
-    return t0, t1
+    return t0, t1  # type: ignore[return-value]  # pd.Timestamp() stubs widen to NaT
 
 
 def _pad_altitudes(df: pd.DataFrame) -> pd.DataFrame:
@@ -374,19 +375,19 @@ def gengrid(
 
     if time_window is not None:
         t0, t1 = _parse_time_window(time_window)
-        df = df[(df.timestamp >= t0) & (df.timestamp <= t1)].copy()
+        df = cast(pd.DataFrame, df[(df.timestamp >= t0) & (df.timestamp <= t1)].copy())
         if "ts" in df.columns:
             df["ts"] = df.ts - df.ts.min()
         click.echo(f"  after time slice: {df.shape}")
 
     if bbox is not None:
         lat_min, lat_max, lon_min, lon_max = _parse_bbox(bbox)
-        df = df[
+        df = cast(pd.DataFrame, df[
             (df.latitude >= lat_min)
             & (df.latitude <= lat_max)
             & (df.longitude >= lon_min)
             & (df.longitude <= lon_max)
-        ].copy()
+        ].copy())
         click.echo(f"  after bbox slice: {df.shape}")
 
     if pad_altitudes:

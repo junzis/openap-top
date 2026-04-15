@@ -5,12 +5,20 @@ Pure functions operating on an optimizer instance passed as argument.
 from __future__ import annotations
 
 import time
+from typing import Any, Callable, Union
 
 import numpy as np
 import pandas as pd
 
+from ._types import ObjectiveFn
 
-def _perturb_guess(df, lateral_km, altitude_ft, proj):
+
+def _perturb_guess(
+    df: pd.DataFrame,
+    lateral_km: float,
+    altitude_ft: float,
+    proj: Any,
+) -> pd.DataFrame:
     """Perturb a canonical initial-guess DataFrame.
 
     Args:
@@ -74,7 +82,7 @@ def _perturb_guess(df, lateral_km, altitude_ft, proj):
     return out
 
 
-def _rank_candidates(candidates):
+def _rank_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Sort candidates best-first: feasibility before objective.
 
     Uses a stable sort. Ties preserve start-index order (insertion order).
@@ -89,7 +97,11 @@ def _rank_candidates(candidates):
     return sorted(candidates, key=lambda c: (not c["success"], c["objective"]))
 
 
-def run_multi_start(optimizer, objective="fuel", **kwargs):
+def run_multi_start(
+    optimizer: Any,
+    objective: Union[str, Callable[..., Any]] = "fuel",
+    **kwargs: Any,
+) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
     """Run N solves from different initial guesses and return the best.
 
     Takes the optimizer instance as explicit arg; no ``self`` coupling.
