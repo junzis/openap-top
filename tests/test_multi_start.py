@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 import opentop as top
-from opentop.base import _perturb_guess
+from opentop._multi_start import _perturb_guess
 
 
 def _make_canonical_df(n=10, origin=(52.362, 13.501), dest=(40.472, -3.563),
@@ -289,7 +289,7 @@ class TestMultiStartLoop:
 
     def test_ranking_feasibility_first_then_objective(self):
         """Synthetic records to test the sort order independently of the solver."""
-        from opentop.base import _rank_candidates
+        from opentop._multi_start import _rank_candidates
         records = [
             {"start_index": 0, "success": False, "objective": 100.0,
              "trajectory": "df_a"},

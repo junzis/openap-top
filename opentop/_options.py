@@ -45,3 +45,32 @@ class TrajectoryResult:
     fuel: float
     grid_cost: float  # NaN if no interpolant
     stats: dict[str, Any]
+
+
+def build_result(df, stats: dict, objective: float) -> TrajectoryResult:
+    """Package a DataFrame + solver stats + objective into a TrajectoryResult.
+
+    Used by Base._make_result after a trajectory() call. ``df`` may be None
+    (from a rejected solve); it is coerced to an empty DataFrame in the result.
+    """
+    has_df = df is not None and len(df) > 0
+    return TrajectoryResult(
+        df=df if df is not None else pd.DataFrame(),
+        success=bool(stats.get("success", False)),
+        status=str(stats.get("return_status", "")),
+        objective=objective,
+        iters=int(stats.get("iter_count", 0)),
+        fuel=(
+            float(df["mass"].iloc[0] - df["mass"].iloc[-1])
+            if has_df and "mass" in df.columns
+            else float("nan")
+        ),
+        grid_cost=(
+            float(df["grid_cost"].sum(skipna=True))
+            if has_df
+            and "grid_cost" in df.columns
+            and df["grid_cost"].notna().any()
+            else float("nan")
+        ),
+        stats=stats,
+    )
