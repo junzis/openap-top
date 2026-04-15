@@ -66,7 +66,7 @@ def _perturb_guess(df, lateral_km, altitude_ft, proj):
             # but IEEE 754 doubles give sin(np.pi) ~= 1.2e-16. Multiplied by
             # lateral_km * 1000 that residual propagates through the custom
             # truncated-pi projection in self.proj (openap.aero hardcodes
-            # 3.14159) and emerges as ~1e-5 degrees / ~3 m at the destination.
+            # truncated-π in openap.aero's bearing calc) and emerges as ~1e-5 degrees / ~3 m at the destination.
             # Zeroing offset_m[0] and offset_m[-1] before the call does NOT
             # help because the projection's round-trip error is independent
             # of the offset magnitude — the endpoints must be clamped here.
@@ -198,13 +198,13 @@ class Base:
             geo, trig = openap.aero, np
 
         if not inverse:
-            bearings = geo.bearing(lat0, lon0, lat, lon) / 180 * 3.14159
+            bearings = geo.bearing(lat0, lon0, lat, lon) / 180 * np.pi
             distances = geo.distance(lat0, lon0, lat, lon)
             return distances * trig.sin(bearings), distances * trig.cos(bearings)
         else:
             x, y = lon, lat
             distances = trig.sqrt(x**2 + y**2)
-            bearing = trig.arctan2(x, y) * 180 / 3.14159
+            bearing = trig.arctan2(x, y) * 180 / np.pi
             lat, lon = geo.latlon(lat0, lon0, distances, bearing)
             return lon, lat
 
