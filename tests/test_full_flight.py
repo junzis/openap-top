@@ -61,3 +61,41 @@ class TestCompleteFlight:
         assert df is not None
         assert len(df) > 0
 
+
+def test_complete_flight_callable_objective():
+    """Verify objective=callable end-to-end, pinning the `(x, u, dt, **kwargs) -> ca.MX`
+    contract. Before Phase 3 changes objective dispatch, this ensures user-supplied
+    callables keep working."""
+    import opentop as top
+
+    opt = top.CompleteFlight("A320", "EHAM", "EDDF", m0=0.85)
+    opt.setup(max_iter=1200)
+
+    def fuel_twice(x, u, dt, **kwargs):
+        # Trivial callable: 2x fuel. Optimum path should match pure-fuel; scale differs.
+        return 2.0 * opt.obj_fuel(x, u, dt)
+
+    df = opt.trajectory(objective=fuel_twice)
+    assert df is not None
+    assert opt.solver.stats()["success"]
+
+
+def test_complete_flight_return_failed_returns_df_on_tight_fuel_budget():
+    """When max_fuel is impossibly tight, the mass-violation or infeasibility path
+    would normally return None. With return_failed=True, the function must return
+    the partial DataFrame instead."""
+    import opentop as top
+
+    opt = top.CompleteFlight("A320", "EHAM", "EDDF", m0=0.85)
+    opt.setup(max_iter=200)
+
+    df = opt.trajectory(
+        objective="fuel",
+        max_fuel=100.0,          # physically impossible for EHAM→EDDF
+        return_failed=True,
+    )
+    # Regardless of whether the solver fails outright or returns a degenerate
+    # trajectory that violates mass constraints, return_failed=True must hand
+    # back a DataFrame (not None).
+    assert df is not None
+
