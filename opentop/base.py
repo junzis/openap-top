@@ -15,7 +15,7 @@ try:
 except ImportError:
     warnings.warn("cfgrib and sklearn are required for wind integration")
 
-from . import _dynamics
+from . import _dynamics, _objectives
 
 
 def _perturb_guess(df, lateral_km, altitude_ft, proj):
@@ -357,22 +357,21 @@ class Base:
 
         # self.ts_final and self.dt are set by _build_opti() before this call
 
-        # Handle objective function
+        # Handle objective function. User callables expect `self.obj_*`
+        # helpers (see tests/test_full_flight.py), so they run as-is. String
+        # specs go through the pure-function registry with model context
+        # injected here.
         if isinstance(objective, Callable):
             self.objective = objective
-        elif isinstance(objective, str) and objective.lower().startswith("ci:"):
-            ci = int(objective[3:])
-            kwargs["ci"] = ci
-            self.objective = self.obj_ci
-        elif isinstance(objective, str) and objective in self._CLIMATE_COEFF:
-            metric = objective
-            self.objective = lambda x, u, dt, **kw: self._obj_climate(
-                x, u, dt, metric, **kw
-            )
+            L = self.objective(self.x, self.u, self.dt, **kwargs)
         else:
-            self.objective = getattr(self, f"obj_{objective}")
-
-        L = self.objective(self.x, self.u, self.dt, **kwargs)
+            resolved = _objectives.resolve_objective(objective)
+            ctx = self._objective_ctx()
+            ctx.update(kwargs)
+            self.objective = lambda x, u, dt, **kw: resolved(
+                x, u, dt, **{**ctx, **kw}
+            )
+            L = resolved(self.x, self.u, self.dt, **ctx)
 
         # Continuous time dynamics
         self.func_dynamics = ca.Function(
@@ -402,6 +401,27 @@ class Base:
                    (length nodes+1), U is list of control MX vars (length nodes).
         """
         self._opti = ca.Opti()
+
+        # Grid-cost interpolants (bspline) need IPOPT's exact Hessian for
+        # numerical stability. For string objective specs this is driven by
+        # the registry's `requires_exact_hessian` flag; for user-supplied
+        # callables (which might internally call obj_grid_cost) the same
+        # effect is triggered by the presence of an `interpolant` kwarg.
+        needs_exact_hessian = False
+        if not isinstance(objective, Callable):
+            try:
+                resolved = _objectives.resolve_objective(objective)
+                needs_exact_hessian = getattr(
+                    resolved, "requires_exact_hessian", False
+                )
+            except (ValueError, TypeError):
+                # Defer the error until init_model so the message matches the
+                # existing dispatch path.
+                pass
+        if kwargs.get("interpolant") is not None:
+            needs_exact_hessian = True
+        if needs_exact_hessian:
+            self.solver_options["ipopt.hessian_approximation"] = "exact"
 
         # Free final time — must be set before init_model
         self.ts_final = self._opti.variable()
@@ -561,29 +581,31 @@ class Base:
 
         return co2, h2o, sox, soot, nox
 
+    # Preserved for back-compat on `Base._CLIMATE_COEFF`; authoritative copy
+    # lives in opentop._objectives.
+    _CLIMATE_COEFF: ClassVar[dict] = _objectives._CLIMATE_COEFF
+
+    def _objective_ctx(self):
+        """Build the model context dict pure objectives need as kwargs."""
+        return {
+            "fuelflow": self.fuelflow,
+            "dT": self.dT,
+            "actype": self.actype,
+            "engtype": self.engtype,
+            "use_synonym": self.use_synonym,
+            "proj": self.proj,
+            "calc_emission": self._calc_emission,
+        }
+
     def obj_fuel(self, x, u, dt, symbolic=True, **kwargs):
-        """Fuel burn objective: fuelflow * dt."""
-        xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
-        mach, vs, psi = u[0], u[1], u[2]
-
-        if symbolic:
-            fuelflow = self.fuelflow
-            v = oc.aero.mach2tas(mach, h, dT=self.dT)
-        else:
-            fuelflow = openap.FuelFlow(
-                self.actype,
-                self.engtype,
-                use_synonym=self.use_synonym,
-                force_engine=True,
-            )
-            v = openap.aero.mach2tas(mach, h, dT=self.dT)
-
-        ff = fuelflow.enroute(m, v / kts, h / ft, vs / fpm, dT=self.dT)
-        return ff * dt
+        """Fuel burn objective: fuelflow * dt. Delegates to _objectives."""
+        ctx = self._objective_ctx()
+        ctx.update(kwargs)
+        return _objectives.obj_fuel(x, u, dt, symbolic=symbolic, **ctx)
 
     def obj_time(self, x, u, dt, **kwargs):
-        """Minimum time objective."""
-        return dt
+        """Minimum time objective. Delegates to _objectives."""
+        return _objectives.obj_time(x, u, dt, **kwargs)
 
     def obj_ci(self, x, u, dt, ci, time_price=25, fuel_price=0.8, **kwargs):
         """Cost index objective blending time and fuel costs.
@@ -593,35 +615,19 @@ class Base:
             time_price: Cost of time in EUR/min. Default 25.
             fuel_price: Cost of fuel in EUR/L. Default 0.8.
         """
-
-        fuel = self.obj_fuel(x, u, dt, **kwargs)
-
-        # time cost 25 eur/min
-        time_cost = (dt / 60) * time_price
-
-        # fuel cost 0.8 eur/L, Jet A density 0.82
-        fuel_cost = fuel * (fuel_price / 0.82)
-
-        obj = ci / 100 * time_cost + (1 - ci / 100) * fuel_cost
-        return obj
-
-    # Climate metric coefficients: (h2o, nox, sox, soot)
-    # CO2 coefficient is always 1.
-    _CLIMATE_COEFF: ClassVar[dict] = {
-        "gwp20": (0.22, 619, -832, 4288),
-        "gwp50": (0.1, 205, -392, 2018),
-        "gwp100": (0.06, 114, -226, 1166),
-        "gtp20": (0.07, -222, -241, 1245),
-        "gtp50": (0.01, -69, -38, 195),
-        "gtp100": (0.008, 13, -31, 161),
-    }
+        ctx = self._objective_ctx()
+        ctx.update(kwargs)
+        return _objectives.obj_ci(
+            x, u, dt,
+            ci=ci, time_price=time_price, fuel_price=fuel_price,
+            **ctx,
+        )
 
     def _obj_climate(self, x, u, dt, metric, **kwargs):
         """Climate impact objective using GWP/GTP metric coefficients."""
-        co2, h2o, sox, soot, nox = self._calc_emission(x, u, **kwargs)
-        c_h2o, c_nox, c_sox, c_soot = self._CLIMATE_COEFF[metric]
-        cost = co2 + c_h2o * h2o + c_nox * nox + c_sox * sox + c_soot * soot
-        return cost * dt
+        ctx = self._objective_ctx()
+        ctx.update(kwargs)
+        return _objectives.obj_climate(x, u, dt, metric=metric, **ctx)
 
     def obj_grid_cost(self, x, u, dt, **kwargs):
         """Grid-based cost objective using a CasADi interpolant.
@@ -633,39 +639,9 @@ class Base:
                 n_dim: Input dimension, 3 (lon,lat,h) or 4 (+ts). Default 3.
                 time_dependent: Multiply cost by dt. Default True.
         """
-
-        xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]
-
-        interpolant = kwargs.get("interpolant", None)
-        symbolic = kwargs.get("symbolic", True)
-        n_dim = kwargs.get("n_dim", 3)
-        time_dependent = kwargs.get("time_dependent", True)
-        if n_dim not in (3, 4):
-            raise ValueError(f"n_dim must be 3 or 4, got {n_dim}")
-
-        self.solver_options["ipopt.hessian_approximation"] = "exact"
-
-        lon, lat = self.proj(xp, yp, inverse=True, symbolic=symbolic)
-
-        if n_dim == 3:
-            input_data = [lon, lat, h]
-        else:
-            input_data = [lon, lat, h, ts]
-
-        if symbolic:
-            input_data = ca.vertcat(*input_data)
-        else:
-            input_data = np.array(input_data)
-
-        cost = interpolant(input_data)
-
-        if not symbolic:
-            cost = cost.full()[0]
-
-        if time_dependent:
-            cost *= dt
-
-        return cost
+        return _objectives.obj_grid_cost(
+            x, u, dt, proj=self.proj, **kwargs
+        )
 
     def to_trajectory(self, ts_final, x_opt, u_opt, **kwargs):
         """Convert optimization results to a trajectory DataFrame.
