@@ -2,7 +2,7 @@
   "objective": 7381.735895568055,
   "iters": 50,
   "fuel": 7381.735895571088,
-  "commit_sha": "45e709f4da02d31a619616c1208c6aefe7a8c97e",
+  "commit_sha": "f32255a",
   "route": "EHAM-LGAV",
   "aircraft": "A320",
   "m0": 0.85,

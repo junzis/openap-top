@@ -98,4 +98,9 @@ def test_complete_flight_return_failed_returns_df_on_tight_fuel_budget():
     # trajectory that violates mass constraints, return_failed=True must hand
     # back a DataFrame (not None).
     assert df is not None
+    # Verify we actually hit the failure path (not a miraculous convergence).
+    assert not opt.solver.stats()["success"], (
+        "max_fuel=100 should be infeasible; if this passes, something is wrong "
+        "with the solver or route"
+    )
 
