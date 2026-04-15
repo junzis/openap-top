@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from math import pi
+from typing import TYPE_CHECKING, Any, Callable
 
 import casadi as ca
 
@@ -9,16 +12,45 @@ from openap.aero import fpm, ft, kts
 
 from .base import Base
 from .cruise import Cruise
+from ._types import LatLon
+
+if TYPE_CHECKING:
+    from ._options import TrajectoryResult
 
 
 class Climb(Base):
     """Climb phase trajectory optimizer."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.cruise = Cruise(*args, **kwargs)
+    def __init__(
+        self,
+        actype: str,
+        origin: str | LatLon,
+        destination: str | LatLon,
+        m0: float = 0.85,
+        engine: str | None = None,
+        use_synonym: bool = False,
+        dT: float = 0.0,
+    ) -> None:
+        super().__init__(
+            actype,
+            origin,
+            destination,
+            m0=m0,
+            engine=engine,
+            use_synonym=use_synonym,
+            dT=dT,
+        )
+        self.cruise = Cruise(
+            actype,
+            origin,
+            destination,
+            m0=m0,
+            engine=engine,
+            use_synonym=use_synonym,
+            dT=dT,
+        )
 
-    def init_conditions(self, df_cruise, alt_stop=None):
+    def init_conditions(self, df_cruise: pd.DataFrame, alt_stop: float | None = None) -> None:
         """Initialize direct collocation bounds and guesses.
 
         Args:
@@ -90,19 +122,19 @@ class Climb(Base):
 
     def trajectory(
         self,
-        objective="fuel",
-        df_cruise=None,
+        objective: str | Callable = "fuel",
+        df_cruise: pd.DataFrame | None = None,
         *,
-        alt_stop=None,
-        remove_cruise=True,
-        initial_guess=None,
-        interpolant=None,
-        n_dim=3,
-        time_dependent=False,
-        auto_rescale_objective=False,
-        exact_hessian=False,
-        result_object=False,
-    ) -> pd.DataFrame:
+        alt_stop: float | None = None,
+        remove_cruise: bool = True,
+        initial_guess: pd.DataFrame | None = None,
+        interpolant: Any = None,
+        n_dim: int = 3,
+        time_dependent: bool = False,
+        auto_rescale_objective: bool = False,
+        exact_hessian: bool = False,
+        result_object: bool = False,
+    ) -> pd.DataFrame | TrajectoryResult:
         """Compute the optimal climb trajectory.
 
         Args:
@@ -125,11 +157,12 @@ class Climb(Base):
         if df_cruise is None:
             if self.debug:
                 print("Finding the preliminary optimal cruise parameters...")
-            df_cruise = self.cruise.trajectory(objective)
+            df_cruise = self.cruise.trajectory(objective)  # type: ignore[assignment]  # result_object=False always returns DataFrame
 
         if self.debug:
             print("Calculating optimal climbing trajectory...")
 
+        assert isinstance(df_cruise, pd.DataFrame)
         self.init_conditions(df_cruise, alt_stop=alt_stop)
 
         _kwargs = {

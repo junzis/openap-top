@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import warnings
-from typing import Callable, ClassVar, Union
+from typing import TYPE_CHECKING, Any, Callable, ClassVar
 
 import casadi as ca
 import openap.casadi as oc
@@ -15,28 +17,33 @@ except ImportError:
     warnings.warn("cfgrib and sklearn are required for wind integration")
 
 from . import _dynamics, _objectives, _trajectory
+from ._types import LatLon
+
+if TYPE_CHECKING:
+    from ._options import TrajectoryResult
 
 
 class Base:
     def __init__(
         self,
         actype: str,
-        origin: Union[str, tuple],
-        destination: Union[str, tuple],
-        m0: float = 0.8,
+        origin: str | LatLon,
+        destination: str | LatLon,
+        m0: float = 0.85,
+        engine: str | None = None,
+        use_synonym: bool = False,
         dT: float = 0.0,
-        use_synonym=False,
-        engine: str = None,
-    ):
+    ) -> None:
         """OpenAP trajectory optimizer.
 
         Args:
             actype (str): ICAO aircraft type code
-            origin (Union[str, tuple]): ICAO or IATA code of airport, or tuple (lat, lon)
-            destination (Union[str, tuple]): ICAO or IATA code of airport, or tuple (lat, lon)
-            m0 (float, optional): Takeoff mass factor. Defaults to 0.8 (of MTOW).
-            dT (float, optional): Temperature shift from standard ISA. Default = 0
-            engine (str, optional): Engine type. Defaults to aircraft's default engine.
+            origin (str | LatLon): ICAO or IATA code of airport, or tuple (lat, lon)
+            destination (str | LatLon): ICAO or IATA code of airport, or tuple (lat, lon)
+            m0 (float, optional): Takeoff mass factor. Defaults to 0.85 (of MTOW).
+            engine (str | None, optional): Engine type. Defaults to aircraft's default engine.
+            use_synonym (bool, optional): Use aircraft type synonym. Defaults to False.
+            dT (float, optional): Temperature shift from standard ISA. Default = 0.
         """
         if isinstance(origin, str):
             ap1 = openap.nav.airport(origin)
@@ -119,7 +126,7 @@ class Base:
         """Whether the most recent solve succeeded."""
         return bool(self._last_solution.stats()["success"])
 
-    def proj(self, lon, lat, inverse=False, symbolic=False):
+    def proj(self, lon: Any, lat: Any, inverse: bool = False, symbolic: bool = False) -> Any:
         """Project between lon/lat and local cartesian coordinates.
 
         Uses azimuthal equidistant projection centered between origin
@@ -153,7 +160,7 @@ class Base:
             lat, lon = geo.latlon(lat0, lon0, distances, bearing)
             return lon, lat
 
-    def _compute_bbox(self, margin_m: float = 10_000):
+    def _compute_bbox(self, margin_m: float = 10_000) -> tuple[float, float, float, float]:
         """Compute projected bounding box around origin/destination with margin.
 
         Returns (x_min, x_max, y_min, y_max) in projected meters.
@@ -171,7 +178,7 @@ class Base:
         hdg = oc.geo.bearing(self.lat1, self.lon1, self.lat2, self.lon2)
         return hdg * np.pi / 180
 
-    def initial_guess(self, flight: pd.DataFrame = None):
+    def initial_guess(self, flight: pd.DataFrame | None = None) -> np.ndarray:
         """Generate initial guess for the optimizer.
 
         Args:
@@ -191,7 +198,7 @@ class Base:
             flight=flight,
         )
 
-    def enable_wind(self, windfield: pd.DataFrame):
+    def enable_wind(self, windfield: pd.DataFrame) -> None:
         """Enable wind field integration using polynomial regression model.
 
         Args:
@@ -231,13 +238,13 @@ class Base:
         self,
         nodes: int | None = None,
         polydeg: int = 3,
-        debug=False,
+        debug: bool = False,
         max_nodes: int = 120,
         max_iter: int = 3000,
         tol: float = 1e-6,
         acceptable_tol: float = 1e-4,
-        ipopt_kwargs=None,
-    ):
+        ipopt_kwargs: dict[str, Any] | None = None,
+    ) -> None:
         """Configure the optimizer discretization and solver settings.
 
         Args:
@@ -559,17 +566,17 @@ class Base:
             "calc_emission": self._calc_emission,
         }
 
-    def obj_fuel(self, x, u, dt, symbolic=True, **kwargs):
+    def obj_fuel(self, x: ca.MX, u: ca.MX, dt: ca.MX, symbolic: bool = True, **kwargs: Any) -> ca.MX:
         """Fuel burn objective: fuelflow * dt. Delegates to _objectives."""
         ctx = self._objective_ctx()
         ctx.update(kwargs)
         return _objectives.obj_fuel(x, u, dt, symbolic=symbolic, **ctx)
 
-    def obj_time(self, x, u, dt, **kwargs):
+    def obj_time(self, x: ca.MX, u: ca.MX, dt: ca.MX, **kwargs: Any) -> ca.MX:
         """Minimum time objective. Delegates to _objectives."""
         return _objectives.obj_time(x, u, dt, **kwargs)
 
-    def obj_ci(self, x, u, dt, ci, time_price=25, fuel_price=0.8, **kwargs):
+    def obj_ci(self, x: ca.MX, u: ca.MX, dt: ca.MX, ci: float, time_price: float = 25, fuel_price: float = 0.8, **kwargs: Any) -> ca.MX:
         """Cost index objective blending time and fuel costs.
 
         Args:
@@ -585,13 +592,13 @@ class Base:
             **ctx,
         )
 
-    def _obj_climate(self, x, u, dt, metric, **kwargs):
+    def _obj_climate(self, x: ca.MX, u: ca.MX, dt: ca.MX, metric: str, **kwargs: Any) -> ca.MX:
         """Climate impact objective using GWP/GTP metric coefficients."""
         ctx = self._objective_ctx()
         ctx.update(kwargs)
         return _objectives.obj_climate(x, u, dt, metric=metric, **ctx)
 
-    def obj_grid_cost(self, x, u, dt, **kwargs):
+    def obj_grid_cost(self, x: ca.MX, u: ca.MX, dt: ca.MX, **kwargs: Any) -> ca.MX:
         """Grid-based cost objective using a CasADi interpolant.
 
         Args:
@@ -605,7 +612,7 @@ class Base:
             x, u, dt, proj=self.proj, **kwargs
         )
 
-    def to_trajectory(self, ts_final, x_opt, u_opt, **kwargs):
+    def to_trajectory(self, ts_final: float, x_opt: np.ndarray, u_opt: np.ndarray, **kwargs: Any) -> pd.DataFrame:
         """Convert optimization results to a trajectory DataFrame.
 
         Args:
@@ -645,7 +652,7 @@ class Base:
         self.dt = dt
         return df
 
-    def _make_result(self, df):
+    def _make_result(self, df: pd.DataFrame | None) -> TrajectoryResult:
         """Package a trajectory DataFrame into a TrajectoryResult.
 
         Used when trajectory(result_object=True). ``df`` may be None (from a
@@ -655,6 +662,10 @@ class Base:
         stats = dict(self._last_solution.stats()) if getattr(self, "_last_solution", None) else {}
         return build_result(df, stats, float(getattr(self, "objective_value", float("nan"))))
 
-    def multi_start_trajectory(self, objective="fuel", **kwargs):
+    def multi_start_trajectory(
+        self,
+        objective: str | Callable = "fuel",
+        **kwargs: Any,
+    ) -> tuple[pd.DataFrame, list[dict]]:
         from . import _multi_start
         return _multi_start.run_multi_start(self, objective, **kwargs)

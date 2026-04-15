@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import warnings
 from math import pi
+from typing import TYPE_CHECKING, Any, Callable
 
 import casadi as ca
 import numpy as np
@@ -8,13 +11,34 @@ import pandas as pd
 from openap.aero import fpm, ft, kts
 
 from .base import Base
+from ._types import LatLon
+
+if TYPE_CHECKING:
+    from ._options import TrajectoryResult
 
 
 class Cruise(Base):
     """Cruise phase trajectory optimizer."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        actype: str,
+        origin: str | LatLon,
+        destination: str | LatLon,
+        m0: float = 0.85,
+        engine: str | None = None,
+        use_synonym: bool = False,
+        dT: float = 0.0,
+    ) -> None:
+        super().__init__(
+            actype,
+            origin,
+            destination,
+            m0=m0,
+            engine=engine,
+            use_synonym=use_synonym,
+            dT=dT,
+        )
 
         self.fix_mach = False
         self.fix_alt = False
@@ -37,7 +61,7 @@ class Cruise(Base):
         """Allow descending during cruise (step descent)."""
         self.allow_descent = True
 
-    def init_conditions(self, **kwargs):
+    def init_conditions(self, **kwargs: Any) -> None:
         """Initialize direct collocation bounds and guesses."""
 
         # Convert lat/lon to cartisian coordinates.
@@ -86,18 +110,18 @@ class Cruise(Base):
 
     def trajectory(
         self,
-        objective="fuel",
+        objective: str | Callable = "fuel",
         *,
-        max_fuel=None,
-        return_failed=False,
-        initial_guess=None,
-        interpolant=None,
-        n_dim=3,
-        time_dependent=False,
-        auto_rescale_objective=False,
-        exact_hessian=False,
-        result_object=False,
-    ) -> pd.DataFrame:
+        max_fuel: float | None = None,
+        return_failed: bool = False,
+        initial_guess: pd.DataFrame | None = None,
+        interpolant: Any = None,
+        n_dim: int = 3,
+        time_dependent: bool = False,
+        auto_rescale_objective: bool = False,
+        exact_hessian: bool = False,
+        result_object: bool = False,
+    ) -> pd.DataFrame | TrajectoryResult:
         """Compute the optimal cruise trajectory.
 
         Args:
@@ -214,4 +238,4 @@ class Cruise(Base):
 
         if result_object:
             return self._make_result(df)
-        return df
+        return df  # type: ignore[return-value]  # df may be None on failed solves; callers handle this
