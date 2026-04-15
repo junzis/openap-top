@@ -160,7 +160,7 @@ class Climb(Base):
             xp_1, yp_1 = df_cruise.x.iloc[0], df_cruise.y.iloc[0]
             xp_2, yp_2 = df_cruise.x.iloc[1], df_cruise.y.iloc[1]
             opti.subject_to(
-                (yp_2 - yp_1) / (xp_2 - xp_1) == (X[-1][1] - yp_1) / (X[-1][0] - xp_1)
+                (yp_2 - yp_1) * (X[-1][0] - xp_1) == (xp_2 - xp_1) * (X[-1][1] - yp_1)
             )
 
         # Fixed range
