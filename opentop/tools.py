@@ -146,7 +146,8 @@ def construct_interpolant(
         ca.interpolant: CasADi interpolant object.
     """
 
-    assert shape in ["linear", "bspline"]
+    if shape not in ("linear", "bspline"):
+        raise ValueError(f"shape must be 'linear' or 'bspline', got {shape!r}")
 
     if max(height) > 20_000:
         raise ValueError(
@@ -184,10 +185,11 @@ def interpolant_from_dataframe(
         ca.interpolant: CasADi interpolant object.
     """
 
-    assert shape in ["linear", "bspline"], "Shape must be 'linear' or 'bspline'"
-    assert "longitude" in df.columns, "Missing 'longitude' column in DataFrame"
-    assert "latitude" in df.columns, "Missing 'latitude' column in DataFrame"
-    assert "height" in df.columns, "Missing 'height' column in DataFrame"
+    if shape not in ("linear", "bspline"):
+        raise ValueError(f"shape must be 'linear' or 'bspline', got {shape!r}")
+    missing = {"longitude", "latitude", "height"} - set(df.columns)
+    if missing:
+        raise ValueError(f"DataFrame missing required columns: {sorted(missing)}")
 
     if "ts" in df.columns:
         df = df.sort_values(["ts", "height", "latitude", "longitude"], ascending=True)

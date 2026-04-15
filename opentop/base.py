@@ -700,7 +700,8 @@ class Base:
         symbolic = kwargs.get("symbolic", True)
         n_dim = kwargs.get("n_dim", 3)
         time_dependent = kwargs.get("time_dependent", True)
-        assert n_dim in [3, 4]
+        if n_dim not in (3, 4):
+            raise ValueError(f"n_dim must be 3 or 4, got {n_dim}")
 
         self.solver_options["ipopt.hessian_approximation"] = "exact"
 
@@ -747,7 +748,8 @@ class Base:
         n_dim = kwargs.get("n_dim")
         if n_dim is None:
             n_dim = interpolant.size1_in(0) if interpolant is not None else 3
-        assert n_dim in [3, 4], f"n_dim must be 3 or 4, got {n_dim}"
+        if n_dim not in (3, 4):
+            raise ValueError(f"n_dim must be 3 or 4, got {n_dim}")
 
         X = x_opt if isinstance(x_opt, np.ndarray) else x_opt.full()
         U = u_opt if isinstance(u_opt, np.ndarray) else u_opt.full()
