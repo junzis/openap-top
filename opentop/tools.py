@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import casadi as ca
 import xarray as xr
@@ -10,8 +12,11 @@ import numpy as np
 import pandas as pd
 from openap import aero
 
+# Type alias for CasADi symbolic/numeric types accepted by PolyWind.
+Symbolic = Union[ca.SX, ca.MX, ca.DM]
 
-def read_grids(paths: str | list[str], engine=None) -> pd.DataFrame:
+
+def read_grids(paths: str | list[str], engine: Optional[str] = None) -> pd.DataFrame:
     """Read meteorological grid data from GRIB/NetCDF files.
 
     Args:
@@ -35,7 +40,7 @@ def read_grids(paths: str | list[str], engine=None) -> pd.DataFrame:
     return df
 
 
-def make_projection(lat1, lon1, lat2, lon2):
+def make_projection(lat1: float, lon1: float, lat2: float, lon2: float) -> Any:
     """Create a pyproj Lambert Conformal Conic projection centered on two points.
 
     Args:
@@ -65,7 +70,16 @@ class PolyWind:
     (SX/MX — returns a symbolic expression usable inside an NLP).
     """
 
-    def __init__(self, windfield: pd.DataFrame, proj, lat1, lon1, lat2, lon2, margin=5):
+    def __init__(
+        self,
+        windfield: pd.DataFrame,
+        proj: Any,
+        lat1: float,
+        lon1: float,
+        lat2: float,
+        lon2: float,
+        margin: float = 5,
+    ) -> None:
         self.wind = windfield
         self.proj = proj
 
@@ -84,10 +98,16 @@ class PolyWind:
         self._poly.fit(X_train)
         ridge = Ridge()
         ridge.fit(self._poly.transform(X_train), df[["u", "v"]].values)
-        self._coef = ridge.coef_          # shape (2, n_features)
-        self._intercept = ridge.intercept_  # shape (2,)
+        self._coef: np.ndarray = np.asarray(ridge.coef_)          # shape (2, n_features)
+        self._intercept: np.ndarray = np.asarray(ridge.intercept_)  # shape (2,)
 
-    def _feature_vec(self, x, y, h, ts):
+    def _feature_vec(
+        self,
+        x: float | Symbolic,
+        y: float | Symbolic,
+        h: float | Symbolic,
+        ts: float | Symbolic,
+    ) -> np.ndarray | list[Symbolic]:
         """Build feature row. Polymorphic: numeric → np.ndarray; CasADi → list of SX/MX."""
         if isinstance(x, (ca.SX, ca.MX, ca.DM)):
             powers = self._poly.powers_   # (n_features, 4)
@@ -101,9 +121,15 @@ class PolyWind:
                 feats.append(term)
             return feats
         else:
-            return self._poly.transform(np.array([[x, y, h, ts]], dtype=float))[0]
+            return np.asarray(self._poly.transform(np.array([[x, y, h, ts]], dtype=float)))[0]
 
-    def calc_u(self, x, y, h, ts):
+    def calc_u(
+        self,
+        x: float | Symbolic,
+        y: float | Symbolic,
+        h: float | Symbolic,
+        ts: float | Symbolic,
+    ) -> float | Symbolic:
         """Compute eastward wind component (m/s) at given position."""
         feats = self._feature_vec(x, y, h, ts)
         if isinstance(x, (ca.SX, ca.MX, ca.DM)):
@@ -113,7 +139,13 @@ class PolyWind:
             return expr
         return float(np.dot(self._coef[0], feats) + self._intercept[0])
 
-    def calc_v(self, x, y, h, ts):
+    def calc_v(
+        self,
+        x: float | Symbolic,
+        y: float | Symbolic,
+        h: float | Symbolic,
+        ts: float | Symbolic,
+    ) -> float | Symbolic:
         """Compute northward wind component (m/s) at given position."""
         feats = self._feature_vec(x, y, h, ts)
         if isinstance(x, (ca.SX, ca.MX, ca.DM)):
@@ -125,13 +157,13 @@ class PolyWind:
 
 
 def construct_interpolant(
-    longitude: np.array,
-    latitude: np.array,
-    height: np.array,
-    grid_value: np.array,
-    timestamp: Optional[np.array] = None,
+    longitude: np.ndarray,
+    latitude: np.ndarray,
+    height: np.ndarray,
+    grid_value: np.ndarray,
+    timestamp: Optional[np.ndarray] = None,
     shape: str = "linear",
-):
+) -> ca.Function:
     """Construct a CasADi interpolant for 3D or 4D grid cost.
 
     Args:
@@ -143,7 +175,7 @@ def construct_interpolant(
         shape: Interpolation type, "linear" or "bspline".
 
     Returns:
-        ca.interpolant: CasADi interpolant object.
+        ca.Function: CasADi interpolant object.
     """
 
     if shape not in ("linear", "bspline"):
@@ -167,7 +199,7 @@ def construct_interpolant(
 
 def interpolant_from_dataframe(
     df: pd.DataFrame, shape: str = "bspline"
-) -> ca.interpolant:
+) -> ca.Function:
     """Construct a CasADi interpolant from a DataFrame.
 
     DataFrame must have columns: longitude, latitude, height (m), cost.
@@ -182,7 +214,7 @@ def interpolant_from_dataframe(
             line search to oscillate on blended or constrained objectives.
 
     Returns:
-        ca.interpolant: CasADi interpolant object.
+        ca.Function: CasADi interpolant object.
     """
 
     if shape not in ("linear", "bspline"):
@@ -247,7 +279,7 @@ def load_interpolant(path: Union[str, Path]) -> ca.Function:
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"No cached interpolant at {path}")
-    return ca.Function.load(str(path))
+    return ca.Function.load(str(path))  # type: ignore[arg-type]
 
 
 def cached_interpolant_from_dataframe(
