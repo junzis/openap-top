@@ -10,6 +10,7 @@ import click
 from ._helpers import parse_objective
 from .gengrid import gengrid
 from .optimize import optimize
+from .replay import replay
 
 
 @click.group()
@@ -20,6 +21,7 @@ def main() -> None:
 
 main.add_command(optimize)
 main.add_command(gengrid)
+main.add_command(replay)
 
 
 __all__ = ["main", "parse_objective"]
