@@ -44,3 +44,10 @@ def test_trajectory_list_with_custom_labels():
     plt = vis.trajectory([df_a, df_b], labels=["actual", "optimized"])
     assert plt is not None
     plt.close("all")
+
+
+def test_trajectory_empty_list_raises():
+    import pytest
+
+    with pytest.raises(ValueError, match="at least one"):
+        vis.trajectory([])

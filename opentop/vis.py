@@ -125,6 +125,9 @@ def trajectory(
         dfs = list(df)
         is_list = True
 
+    if not dfs:
+        raise ValueError("vis.trajectory requires at least one DataFrame")
+
     if labels is None:
         if len(dfs) == 2:
             labels = ["actual", "optimized"]

@@ -277,19 +277,7 @@ def replay(
 
         from opentop import vis
 
-        # vis.trajectory expects ts/tas/vertical_rate; the raw OpenSky trace
-        # has timestamp/groundspeed/vertical_rate. Derive missing columns for
-        # a best-effort overlay plot.
-        flight_plot = flight_filtered.copy()
-        if "ts" not in flight_plot.columns and "timestamp" in flight_plot.columns:
-            flight_plot["ts"] = (
-                flight_plot["timestamp"] - flight_plot["timestamp"].iloc[0]  # type: ignore[union-attr]
-            ).dt.total_seconds()
-        if "tas" not in flight_plot.columns and "groundspeed" in flight_plot.columns:
-            # Ground speed is a reasonable stand-in when TAS isn't available.
-            flight_plot["tas"] = flight_plot["groundspeed"]
-        if "vertical_rate" not in flight_plot.columns:
-            flight_plot["vertical_rate"] = 0.0
+        flight_plot = replay_mod.normalize_flight_for_vis(flight_filtered)  # type: ignore[arg-type]  # reset_index widens to DataFrame|Series
 
         plt = vis.trajectory([flight_plot, optimized], labels=["actual", "optimized"])
         plt.savefig(output_dir / "trajectory.png", dpi=120, bbox_inches="tight")

@@ -83,6 +83,11 @@ def _fetch_from_file(path: Path, callsign: str | None = None) -> pd.DataFrame:
     """Load a saved Traffic-compatible flight file (parquet/csv).
 
     If `callsign` is given, filter to matching rows; otherwise return all rows.
+
+    Note:
+        This function does not filter by `start`/`stop` — the caller is
+        responsible for time-window filtering if needed. The `fetch_flight`
+        public wrapper passes `start`/`stop` only to the OpenSky path.
     """
     if not path.exists():
         raise FileNotFoundError(f"Flight file not found: {path}")
@@ -148,6 +153,15 @@ def build_meteo_and_wind(
       meteo_df: ERA5 fields on a bbox x altitudes x times grid.
       wind_df:  columns (ts, latitude, longitude, h, u, v) ready for
                 `Base.enable_wind(wind_df)`.
+
+    Note:
+        The returned `wind_df.ts` starts at zero relative to the meteo grid's
+        first timestamp (which equals the flight's first sample). `Base.enable_wind`
+        interprets `ts` relative to the start of the optimized trajectory. When the
+        optimizer's zero-time aligns with the flight's first sample (the default
+        when endpoints are taken from the flight), wind is interpolated at the
+        correct epoch. If you supply a different temporal reference, shift
+        `wind_df.ts` accordingly before calling `enable_wind`.
     """
     try:
         from fastmeteo.source import ArcoEra5
@@ -206,6 +220,29 @@ def build_meteo_and_wind(
     )
 
     return meteo, wind
+
+
+def normalize_flight_for_vis(flight_df: pd.DataFrame) -> pd.DataFrame:
+    """Return a copy of a flight DataFrame with the columns vis.trajectory needs.
+
+    OpenSky traces have (timestamp, latitude, longitude, altitude, groundspeed,
+    vertical_rate) — `vis.trajectory` expects (ts, tas, vertical_rate). This
+    helper synthesizes:
+      - ts:   seconds from first timestamp
+      - tas:  groundspeed as a stand-in for true airspeed (TAS not available
+              in OpenSky data; this is a best-effort approximation)
+      - vertical_rate: zero-filled if absent
+
+    Idempotent — if the columns already exist, they are preserved.
+    """
+    df = flight_df.copy()
+    if "ts" not in df.columns and "timestamp" in df.columns:
+        df["ts"] = (df["timestamp"] - df["timestamp"].iloc[0]).dt.total_seconds()
+    if "tas" not in df.columns and "groundspeed" in df.columns:
+        df["tas"] = df["groundspeed"]
+    if "vertical_rate" not in df.columns:
+        df["vertical_rate"] = 0.0
+    return df
 
 
 def _agg_conditions(meteo: pd.DataFrame) -> pd.DataFrame:
