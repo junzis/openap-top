@@ -197,19 +197,24 @@ def replay(
     opt = opt_cls(aircraft, (lat0, lon0), (lat1, lon1), m0=m0)
     opt.setup(debug=debug, max_iter=max_iter)
 
-    # Wind (unless --no-wind)
-    if not no_wind:
-        click.echo("Fetching ERA5 meteo + building wind field...")
-        _, wind_df = replay_mod.build_meteo_and_wind(flight, era5_store=era5_store)
+    # Fetch meteo once if we need it for either wind or contrail grid.
+    needs_grid = any(tok in objective for tok in ("grid", "gwp", "gtp"))
+    meteo_df = None
+    wind_df = None
+    if not no_wind or needs_grid:
+        click.echo("Fetching ERA5 meteo...")
+        meteo_df, wind_df = replay_mod.build_meteo_and_wind(
+            flight, era5_store=era5_store
+        )
+
+    if not no_wind and wind_df is not None:
+        click.echo("  enabling wind field")
         opt.enable_wind(wind_df)
 
-    # Contrail interpolant (only if objective references grid/climate)
-    needs_grid = any(tok in objective for tok in ("grid", "gwp", "gtp"))
     interpolant = None
-    if needs_grid:
+    if needs_grid and meteo_df is not None:
         click.echo("Building contrail interpolant...")
-        meteo, _ = replay_mod.build_meteo_and_wind(flight, era5_store=era5_store)
-        interpolant = replay_mod.build_contrail_interpolant(meteo, sigma=sigma)
+        interpolant = replay_mod.build_contrail_interpolant(meteo_df, sigma=sigma)
 
     # Build objective callable
     from ._helpers import build_objective_callable, parse_objective

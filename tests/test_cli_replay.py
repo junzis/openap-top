@@ -117,19 +117,14 @@ def test_wizard_returns_none_on_cancel():
 
 
 def test_wizard_dispatch_from_cli_with_no_args():
-    """Invoking `opentop replay` with no args enters the wizard (interactive path).
+    """Invoking `opentop replay` with no args enters the wizard.
 
-    We feed EOF immediately to the wizard's first prompt; click raises Abort.
-    We only assert the CLI didn't crash with a non-wizard error.
+    Feed EOF to abort immediately; assert wizard's first prompt is visible.
     """
     runner = CliRunner()
     result = runner.invoke(cli_main, ["replay"], input="")
-    # Exit code 1 (aborted) or 2 (usage) is acceptable; non-zero is fine.
-    # Just make sure the wizard was attempted (its prompt text is visible).
     assert result.exit_code != 0
-    # The wizard's first prompt asks about the callsign.
-    assert (
-        "allsign" in result.output  # prompt label
-        or "Aborted" in result.output  # click's default abort message
-        or result.output == ""  # click may suppress the prompt on EOF
+    # The wizard's first prompt contains 'allsign' (title-case 'Callsign').
+    assert "allsign" in result.output, (
+        f"Expected wizard prompt; got exit {result.exit_code}:\n{result.output}"
     )
