@@ -103,3 +103,35 @@ def _fetch_from_file(path: Path, callsign: str | None = None) -> pd.DataFrame:
             raise ValueError(f"No rows with callsign={callsign!r} in {path}.")
 
     return df.reset_index(drop=True)  # type: ignore[return-value]
+
+
+def infer_aircraft(flight_df: pd.DataFrame) -> str | None:
+    """Map the flight's primary ICAO24 to an aircraft type (e.g. 'B738').
+
+    Returns None if the lookup fails, the icao24 is unknown, or the
+    `traffic` package is not installed.
+    """
+    if "icao24" not in flight_df.columns or flight_df.empty:
+        return None
+
+    icao24 = flight_df["icao24"].iloc[0]
+
+    try:
+        from traffic.data import aircraft
+    except ImportError:
+        return None
+
+    try:
+        matches = aircraft.get(icao24)
+    except Exception:
+        return None
+
+    if matches is None or (hasattr(matches, "empty") and matches.empty):
+        return None
+    if "typecode" not in matches.columns:
+        return None
+
+    typecode = matches["typecode"].iloc[0]
+    if pd.isna(typecode):
+        return None
+    return str(typecode).strip() or None
