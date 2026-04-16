@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+# Force non-interactive matplotlib backend BEFORE any import that may pull
+# matplotlib.pyplot (opentop.__init__ eagerly imports opentop.vis which
+# imports pyplot, which locks in the default Tk backend and crashes in
+# headless / SSH environments without $DISPLAY).
+import matplotlib
+
+matplotlib.use("Agg")
+
 import sys
 import time
 from pathlib import Path
@@ -261,11 +269,6 @@ def replay(
     if optimized is not None:
         optimized.to_parquet(output_dir / "optimized.parquet")
 
-        # Force non-interactive matplotlib backend (CLI runs are headless /
-        # over SSH; default Tk backend crashes without $DISPLAY).
-        import matplotlib
-
-        matplotlib.use("Agg")
         from opentop import vis
 
         # vis.trajectory expects ts/tas/vertical_rate; the raw OpenSky trace
