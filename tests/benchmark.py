@@ -10,7 +10,7 @@ Usage:
     python tests/benchmark.py --version 2.0.0    # Benchmark PyPI version
     python tests/benchmark.py --output report.txt
 
-Grid cost tests use tests/fixtures/synthetic_4d.casadi. If absent, the
+Grid cost tests use tests/fixtures/contrail_4d.casadi. If absent, the
 grid cost section is skipped.
 """
 
@@ -191,7 +191,7 @@ def run_benchmarks():
         print(f"  {label}...", file=sys.stderr, flush=True)
         results["standard"].append(_run_standard_case(label, factory, objective))
 
-    casadi_cache = REPO_ROOT / "tests" / "fixtures" / "synthetic_4d.casadi"
+    casadi_cache = REPO_ROOT / "tests" / "fixtures" / "contrail_4d.casadi"
     if casadi_cache.exists():
         print("  grid cost cases...", file=sys.stderr, flush=True)
         try:
@@ -240,7 +240,7 @@ def _run_grid_cost_cases(casadi_path, top):
         print(f"    {label}...", file=sys.stderr, flush=True)
         t0 = time.time()
         try:
-            opt = cls("A320", "EHAM", "LGAV", 0.85)
+            opt = cls("A320", "EDDB", "LEMD", 0.85)
             _setup(opt, max_iter=2000)
             df_fuel = opt.trajectory(objective="fuel")
             df = opt.trajectory(

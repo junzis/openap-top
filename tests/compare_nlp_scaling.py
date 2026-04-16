@@ -20,14 +20,12 @@ AIRCRAFT = "A320"
 M0 = 0.85
 
 ROUTES = [
-    ("EHAM", "LGAV"),  # Amsterdam - Athens (~2100 km)
-    ("EHAM", "EDDF"),  # Amsterdam - Frankfurt (~370 km, short)
-    ("EGLL", "LEMD"),  # London - Madrid (~1260 km, medium)
+    ("EDDB", "LEMD"),  # Berlin - Madrid (~2300 km, within real grid's domain)
 ]
 
 SCALING_METHODS = ["gradient-based", "none"]
 
-CASADI_CACHE = Path(__file__).parent / "fixtures" / "synthetic_4d.casadi"
+CASADI_CACHE = Path(__file__).parent / "fixtures" / "contrail_4d.casadi"
 
 
 def make_contrail_objective(optimizer):

@@ -12,21 +12,22 @@ import pytest
 import opentop as top
 import opentop.tools as tools
 
-FIXTURE = Path(__file__).parent / "fixtures" / "synthetic_4d.casadi"
+FIXTURE = Path(__file__).parent / "fixtures" / "contrail_4d.casadi"
 
 
 @pytest.fixture(scope="module")
 def interp_4d():
     if not FIXTURE.exists():
         pytest.skip(
-            f"{FIXTURE} not built; "
-            "run `uv run --with '.' python tests/fixtures/build_synthetic_4d.py`"
+            f"{FIXTURE} not found; "
+            "copy the real ERA5/contrail interpolant to "
+            "tests/fixtures/contrail_4d.casadi"
         )
     return tools.load_interpolant(str(FIXTURE))
 
 
 def test_cruise_with_4d_grid_cost_converges(interp_4d):
-    opt = top.Cruise("A320", (52.308, 4.764), (50.033, 8.570), m0=0.85)
+    opt = top.Cruise("A320", (52.362, 13.501), (40.472, -3.563), m0=0.85)
     opt.setup(max_iter=800)
 
     def blended(x, u, dt, **kwargs):
