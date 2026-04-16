@@ -2,23 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 import numpy as np
 import pandas as pd
+from opentop import replay
 
-# traffic 2.13 exposes opensky lazily via __getattr__; accessing it on pandas ≥ 2.0
-# raises ImportError (DatetimeTZBlock removed).  Probe both the package and the
-# attribute so the whole module skips cleanly in broken environments.
-_traffic_data = pytest.importorskip("traffic.data")
-try:
-    _traffic_data.opensky
-except Exception as _exc:
-    pytest.skip(f"traffic.data.opensky unavailable: {_exc}", allow_module_level=True)
-
-from opentop import replay  # noqa: E402
+FIXTURE = Path(__file__).parent / "fixtures" / "flight_ryr880w_2023-01-05.parquet"
 
 
 def _fake_opensky_flight_df():
@@ -41,6 +34,15 @@ def _fake_opensky_flight_df():
 
 
 def test_fetch_flight_opensky_happy_path():
+    # traffic 2.13 exposes opensky lazily via __getattr__; accessing it on pandas ≥ 2.0
+    # raises ImportError (DatetimeTZBlock removed).  Probe both the package and the
+    # attribute so this test skips cleanly in broken environments.
+    _traffic_data = pytest.importorskip("traffic.data")
+    try:
+        _traffic_data.opensky
+    except Exception as _exc:
+        pytest.skip(f"traffic.data.opensky unavailable: {_exc}")
+
     fake_flight = MagicMock()
     fake_flight.data = _fake_opensky_flight_df()
 
@@ -60,6 +62,12 @@ def test_fetch_flight_opensky_happy_path():
 
 
 def test_fetch_flight_opensky_no_results_raises():
+    _traffic_data = pytest.importorskip("traffic.data")
+    try:
+        _traffic_data.opensky
+    except Exception as _exc:
+        pytest.skip(f"traffic.data.opensky unavailable: {_exc}")
+
     with patch("traffic.data.opensky.history", return_value=None):
         with pytest.raises(ValueError, match="No flight data"):
             replay.fetch_flight(
@@ -71,6 +79,12 @@ def test_fetch_flight_opensky_no_results_raises():
 
 
 def test_fetch_flight_opensky_picks_main_icao24_when_multiple():
+    _traffic_data = pytest.importorskip("traffic.data")
+    try:
+        _traffic_data.opensky
+    except Exception as _exc:
+        pytest.skip(f"traffic.data.opensky unavailable: {_exc}")
+
     df_mixed = _fake_opensky_flight_df()
     # Inject a few rows with a different icao24 (minority → should be dropped)
     df_mixed.loc[df_mixed.index[:3], "icao24"] = "cafe00"
@@ -86,3 +100,33 @@ def test_fetch_flight_opensky_picks_main_icao24_when_multiple():
         )
 
     assert (df["icao24"] == "4bb9b1").all()
+
+
+def test_fetch_flight_from_parquet_fixture():
+    """Loading the committed OpenSky fixture returns a sane DataFrame."""
+    if not FIXTURE.exists():
+        pytest.skip(f"Missing fixture {FIXTURE}; regenerate via OpenSky.")
+
+    df = replay.fetch_flight(
+        callsign="RYR880W",
+        start="2023-01-05 09:00",
+        stop="2023-01-05 13:00",
+        source=FIXTURE,
+    )
+
+    assert {"timestamp", "latitude", "longitude", "altitude", "icao24"}.issubset(
+        df.columns
+    )
+    assert (df["callsign"].str.strip() == "RYR880W").all()
+    assert df["icao24"].nunique() == 1, "expected exactly one icao24 after filtering"
+    assert df.altitude.max() > 30_000, "cruise altitude should be above FL300"
+
+
+def test_fetch_flight_from_file_missing_raises():
+    with pytest.raises(FileNotFoundError):
+        replay.fetch_flight(
+            callsign="X",
+            start="2023-01-05 00:00",
+            stop="2023-01-05 23:59",
+            source=Path("/tmp/does_not_exist_12345.parquet"),
+        )

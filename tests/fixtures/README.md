@@ -32,3 +32,20 @@ public mirror).
 
 Baseline objective/fuel/iters for the CompleteFlight EHAM→LGAV A320
 golden-smoke regression test. Recorded at commit f32255a.
+
+## flight_ryr880w_2023-01-05.parquet
+
+Real OpenSky trace for RYR880W on 2023-01-05 (EDDB→LEMD, B738). Paired
+with `contrail_4d.casadi` (same flight, same date). Used by
+`tests/test_replay_fetch.py` and `tests/test_replay_end_to_end.py`.
+
+**Regeneration (requires OpenSky credentials):**
+
+    uv run --no-project --with "pandas<3" --with traffic --with pyarrow python -c "
+    from traffic.data import opensky
+    f = opensky.history(
+        '2023-01-05T09:00', '2023-01-05T13:00',
+        callsign='RYR880W', return_flight=True,
+    )
+    f.to_parquet('tests/fixtures/flight_ryr880w_2023-01-05.parquet')
+    "
