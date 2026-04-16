@@ -7,9 +7,10 @@ from matplotlib.gridspec import GridSpec
 from openap import aero
 
 import numpy as np
+import pandas as pd
 
 
-def plot_map(df, windfield=None, ax=None, barb_steps=10):
+def plot_map(df, windfield=None, ax=None, barb_steps=10, color=None, label=None):
     """Plot trajectory on a map with optional wind barbs.
 
     Args:
@@ -87,11 +88,11 @@ def plot_map(df, windfield=None, ax=None, barb_steps=10):
         ax.plot(
             df.longitude,
             df.latitude,
-            color="tab:green",
+            color=color if color is not None else "tab:green",
             transform=ccrs.Geodetic(),
             linewidth=2,
             marker=".",
-            label="Optimal",
+            label=label if label is not None else "Optimal",
         )
 
         ax.legend()
@@ -99,49 +100,90 @@ def plot_map(df, windfield=None, ax=None, barb_steps=10):
         return plt
 
 
-def trajectory(df, windfield=None, barb_steps=10):
+def trajectory(
+    df,
+    windfield=None,
+    labels=None,
+    barb_steps=10,
+):
     """Plot trajectory profiles (altitude, TAS, VS) alongside a map.
 
     Args:
-        df: Trajectory DataFrame.
-        windfield: Wind data DataFrame for map wind barbs.
+        df: Single DataFrame or list of DataFrames for overlay.
+        windfield: Wind data DataFrame for map wind barbs (first df only).
+        labels: Legend labels when df is a list. Defaults to
+            ["actual", "optimized"] for 2 dfs, ["trajectory N", ...] else.
         barb_steps: Step interval for wind barb subsampling.
 
     Returns:
         matplotlib.pyplot module.
     """
-    fig = plt.figure(figsize=(12, 5))
+    if isinstance(df, pd.DataFrame):
+        dfs = [df]
+        is_list = False
+    else:
+        dfs = list(df)
+        is_list = True
 
+    if labels is None:
+        if len(dfs) == 2:
+            labels = ["actual", "optimized"]
+        else:
+            labels = [f"trajectory {i + 1}" for i in range(len(dfs))]
+
+    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+    fig = plt.figure(figsize=(12, 5))
     gs = GridSpec(3, 2)
 
     ax1 = fig.add_subplot(gs[0, 0])
-    ax1.plot(df.ts, df.altitude, lw=2, marker=".")
+    ax2 = fig.add_subplot(gs[1, 0])
+    ax3 = fig.add_subplot(gs[2, 0])
+
+    for i, d in enumerate(dfs):
+        color = colors[i % len(colors)]
+        label = labels[i] if is_list else None
+        ax1.plot(d.ts, d.altitude, lw=2, marker=".", color=color, label=label)
+        ax2.plot(d.ts, d.tas, lw=2, marker=".", color=color, label=label)
+        ax3.plot(d.ts, d.vertical_rate, lw=2, marker=".", color=color, label=label)
+
     ax1.set_ylabel("altitude (ft)")
     ax1.set_ylim(0, 45_000)
     ax1.grid(ls=":")
-
-    ax2 = fig.add_subplot(gs[1, 0])
-    ax2.plot(df.ts, df.tas, lw=2, marker=".")
     ax2.set_ylabel("TAS")
     ax2.set_ylim(0, 600)
     ax2.grid(ls=":")
-
-    ax3 = fig.add_subplot(gs[2, 0])
-    ax3.plot(df.ts, df.vertical_rate, lw=2, marker=".")
     ax3.set_ylabel("VS (ft/min)")
     ax3.set_ylim(-3000, 3000)
     ax3.grid(ls=":")
 
+    if is_list:
+        ax1.legend(loc="best", fontsize=8)
+
+    mean_lon = float(np.mean([d.longitude.mean() for d in dfs]))
+    mean_lat = float(np.mean([d.latitude.mean() for d in dfs]))
     ax5 = fig.add_subplot(
         gs[:, 1],
         projection=ccrs.TransverseMercator(
-            central_longitude=df.longitude.mean(),
-            central_latitude=df.latitude.mean(),
+            central_longitude=mean_lon,
+            central_latitude=mean_lat,
         ),
     )
 
-    plot_map(df, windfield, ax=ax5, barb_steps=barb_steps)
+    for i, d in enumerate(dfs):
+        color = colors[i % len(colors)]
+        label = labels[i] if is_list else None
+        plot_map(
+            d,
+            windfield=windfield if i == 0 else None,
+            ax=ax5,
+            barb_steps=barb_steps,
+            color=color,
+            label=label,
+        )
+
+    if is_list:
+        ax5.legend(loc="best", fontsize=8)
 
     plt.tight_layout()
-
     return plt
