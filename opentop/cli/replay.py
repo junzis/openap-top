@@ -91,8 +91,7 @@ def replay(
 ) -> None:
     """Replay a real flight by callsign with optimization.
 
-    If CALLSIGN is omitted, drops into the interactive wizard (coming in the
-    next release).
+    If CALLSIGN is omitted, drops into the interactive wizard.
     """
     import pandas as pd
     from opentop import replay as replay_mod
