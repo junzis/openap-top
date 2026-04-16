@@ -206,3 +206,75 @@ def build_meteo_and_wind(
     )
 
     return meteo, wind
+
+
+def _agg_conditions(meteo: pd.DataFrame) -> pd.DataFrame:
+    """Annotate a meteo DataFrame with contrail flags.
+
+    Adds columns: rhi, crit_temp, sac, issr, persistent.
+    Ported from debug/epsilon_constraint/driver_epsilon_constraint.py.
+    """
+    from openap import aero, contrail
+
+    return meteo.assign(
+        rhi=lambda d: contrail.relative_humidity(
+            d.specific_humidity,
+            aero.pressure(d.altitude * aero.ft),
+            d.temperature,
+            to="ice",
+        ),
+        crit_temp=lambda d: contrail.critical_temperature_water(
+            aero.pressure(d.altitude * aero.ft)
+        ),
+        sac=lambda d: d.temperature < d.crit_temp,
+        issr=lambda d: d.rhi > 1,
+        persistent=lambda d: d.sac & d.issr,
+    )
+
+
+def build_contrail_interpolant(meteo_df: pd.DataFrame, sigma: int = 2):
+    """Build a 4D CasADi bspline interpolant of contrail persistence cost.
+
+    Pipeline: openap contrail physics → 4D reshape → Gaussian smoothing over
+    (height, lat, lon) → opentop.tools.interpolant_from_dataframe(bspline).
+
+    Args:
+        meteo_df: ERA5 meteo with columns timestamp, latitude, longitude,
+            altitude (ft), temperature, specific_humidity.
+        sigma: Gaussian smoothing sigma applied over (height, lat, lon) axes.
+
+    Returns:
+        ca.Function — 4D bspline interpolant over (lon, lat, h_m, ts_s).
+    """
+    try:
+        from scipy.ndimage import gaussian_filter
+    except ImportError as exc:
+        raise ImportError(
+            "opentop replay requires the `scipy` package. "
+            'Install with: pip install "opentop[replay]"'
+        ) from exc
+
+    from openap.aero import ft
+
+    from opentop import tools
+
+    contrail_df = _agg_conditions(meteo_df)
+
+    df_cost = contrail_df.assign(
+        height=lambda x: x.altitude * ft,
+        cost=lambda x: x.persistent.astype(float),
+        ts=lambda x: (x.timestamp - x.timestamp.iloc[0]).dt.total_seconds(),
+    ).sort_values(["ts", "height", "latitude", "longitude"])
+
+    cost_array = df_cost.cost.values.reshape(
+        df_cost.ts.nunique(),
+        df_cost.height.nunique(),
+        df_cost.latitude.nunique(),
+        df_cost.longitude.nunique(),
+    )
+    cost_smoothed = gaussian_filter(
+        cost_array, sigma=(0, sigma, sigma, sigma), mode="nearest"
+    )
+    df_cost = df_cost.assign(cost=cost_smoothed.flatten()).fillna(0)
+
+    return tools.interpolant_from_dataframe(df_cost)

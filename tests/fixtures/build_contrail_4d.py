@@ -34,44 +34,6 @@ import sys
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Contrail physics helpers (ported verbatim from debug/epsilon_constraint/
-# driver_epsilon_constraint.py, using openap.contrail + openap.aero)
-# ---------------------------------------------------------------------------
-
-
-def agg_conditions(flight):
-    """Annotate a meteo DataFrame with contrail flags.
-
-    Adds columns: rhi, crit_temp, sac, issr, persistent.
-
-    Args:
-        flight: DataFrame with columns temperature, specific_humidity,
-            altitude (feet), and pressure-derived quantities resolvable
-            via openap.aero.pressure(altitude_m).
-
-    Returns:
-        DataFrame with contrail condition columns appended.
-    """
-    from openap import aero, contrail
-
-    f = flight.assign(
-        rhi=lambda d: contrail.relative_humidity(
-            d.specific_humidity,
-            aero.pressure(d.altitude * aero.ft),
-            d.temperature,
-            to="ice",
-        ),
-        crit_temp=lambda d: contrail.critical_temperature_water(
-            aero.pressure(d.altitude * aero.ft)
-        ),
-        sac=lambda d: d.temperature < d.crit_temp,
-        issr=lambda d: d.rhi > 1,
-        persistent=lambda d: d.sac & d.issr,
-    )
-    return f
-
-
-# ---------------------------------------------------------------------------
 # ERA5 grid builder
 # ---------------------------------------------------------------------------
 
@@ -166,10 +128,8 @@ def build_interpolant(
         out:   Output path for the .casadi interpolant file.
         era5_store: Local Zarr store path for ArcoEra5.
     """
-    from openap import aero
-    from scipy.ndimage import gaussian_filter
-
     import opentop.tools as tools
+    from opentop import replay
 
     print(f"Building contrail interpolant → {out}", file=sys.stderr)
 
@@ -192,40 +152,14 @@ def build_interpolant(
     print(f"  Meteo grid: {len(meteo):,} rows", file=sys.stderr)
 
     # ------------------------------------------------------------------
-    # 2. Compute contrail conditions
-    # ------------------------------------------------------------------
-    print("  Computing contrail conditions…", file=sys.stderr)
-    contrail_df = agg_conditions(meteo)
-
-    # ------------------------------------------------------------------
-    # 3. Reshape cost into (ts, height, lat, lon) and smooth
+    # 2-4. Contrail conditions → Gaussian smoothing → bspline interpolant
     # ------------------------------------------------------------------
     print(
-        f"  Applying Gaussian filter sigma=(0, {sigma}, {sigma}, {sigma})…",
+        f"  Computing contrail conditions, smoothing (sigma={sigma}), "
+        "and building bspline interpolant…",
         file=sys.stderr,
     )
-    df_cost = contrail_df.assign(
-        height=lambda x: x.altitude * aero.ft,
-        cost=lambda x: x.persistent.astype(float),
-        ts=lambda x: (x.timestamp - x.timestamp.iloc[0]).dt.total_seconds(),
-    ).sort_values(["ts", "height", "latitude", "longitude"])
-
-    cost_array = df_cost.cost.values.reshape(
-        df_cost.ts.nunique(),
-        df_cost.height.nunique(),
-        df_cost.latitude.nunique(),
-        df_cost.longitude.nunique(),
-    )
-    cost_smoothed = gaussian_filter(
-        cost_array, sigma=(0, sigma, sigma, sigma), mode="nearest"
-    )
-    df_cost = df_cost.assign(cost=cost_smoothed.flatten()).fillna(0)
-
-    # ------------------------------------------------------------------
-    # 4. Build bspline interpolant and save
-    # ------------------------------------------------------------------
-    print("  Building bspline interpolant…", file=sys.stderr)
-    interpolant = tools.interpolant_from_dataframe(df_cost)
+    interpolant = replay.build_contrail_interpolant(meteo, sigma=sigma)
 
     out_path = Path(out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
