@@ -261,6 +261,11 @@ def replay(
     if optimized is not None:
         optimized.to_parquet(output_dir / "optimized.parquet")
 
+        # Force non-interactive matplotlib backend (CLI runs are headless /
+        # over SSH; default Tk backend crashes without $DISPLAY).
+        import matplotlib
+
+        matplotlib.use("Agg")
         from opentop import vis
 
         # vis.trajectory expects ts/tas/vertical_rate; the raw OpenSky trace
