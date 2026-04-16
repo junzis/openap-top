@@ -9,9 +9,8 @@ The output should be well under 2 MB — small enough to commit.
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
-
 import opentop.tools as tools
+import pandas as pd
 
 
 def build():

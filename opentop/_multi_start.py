@@ -11,8 +11,6 @@ from typing import Any, Callable, Union
 import numpy as np
 import pandas as pd
 
-from ._types import ObjectiveFn
-
 
 def _perturb_guess(
     df: pd.DataFrame,

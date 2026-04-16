@@ -1,11 +1,11 @@
 """Pin PolyWind numeric and symbolic output. Regression guard for the eval() rewrite."""
 
 import casadi as ca
+
 import numpy as np
+import opentop.tools as tools
 import pandas as pd
 import pyproj
-
-import opentop.tools as tools
 
 
 def _fake_wind_df():

@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 from cartopy import crs as ccrs
 from cartopy.feature import BORDERS, LAND, OCEAN
 from matplotlib.gridspec import GridSpec
+from openap import aero
 
 import numpy as np
-from openap import aero
 
 
 def plot_map(df, windfield=None, ax=None, barb_steps=10):

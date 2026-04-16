@@ -10,9 +10,9 @@ from openap.aero import fpm, ft, kts
 import numpy as np
 import pandas as pd
 
+from ._types import LatLon
 from .base import Base
 from .cruise import Cruise
-from ._types import LatLon
 
 if TYPE_CHECKING:
     from ._options import TrajectoryResult

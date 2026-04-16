@@ -1,10 +1,10 @@
 """Tests for the interpolant cache utilities in opentop.tools."""
 
 import casadi as ca
-import numpy as np
-import pandas as pd
 import pytest
 
+import numpy as np
+import pandas as pd
 from opentop import tools
 
 

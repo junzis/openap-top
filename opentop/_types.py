@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Callable, Union
 
 import casadi as ca
+
 import numpy as np
 
 # Lat/Lon pair used as airport designator

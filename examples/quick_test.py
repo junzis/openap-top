@@ -3,7 +3,6 @@ import time
 import warnings
 
 import numpy as np
-
 import opentop as top
 
 # %%
@@ -37,4 +36,3 @@ print(f"Fuel Cost: {fuel_cost_val:.2f} | Objective: {obj:.2f} | Status: {status}
 print(flight)
 
 print(f"\nOptimal trajectory was generated in {round(time.time() - start)} seconds.\n")
-

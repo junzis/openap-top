@@ -4,11 +4,11 @@ Pins the Cruise.enable_wind → PolyWind → xdot wind branch. Uses a synthetic
 constant-tailwind field so the solver's behaviour is predictable.
 """
 
-import numpy as np
-import pandas as pd
 import pytest
 
+import numpy as np
 import opentop as top
+import pandas as pd
 
 
 @pytest.fixture(scope="module")

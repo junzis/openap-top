@@ -12,7 +12,6 @@ import pytest
 import opentop as top
 import opentop.tools as tools
 
-
 FIXTURE = Path(__file__).parent / "fixtures" / "synthetic_4d.casadi"
 
 

@@ -24,6 +24,12 @@ jobs:
       - name: Install project
         run: uv sync --all-extras
 
+      - name: Run ruff format check
+        run: uv run --with ruff ruff format --check opentop tests
+
+      - name: Run ruff lint
+        run: uv run --with ruff ruff check opentop tests
+
       - name: Run pytest
         run: uv run pytest tests/ -n auto
 

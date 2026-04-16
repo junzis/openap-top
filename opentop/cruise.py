@@ -5,13 +5,13 @@ from math import pi
 from typing import TYPE_CHECKING, Any, Callable
 
 import casadi as ca
-import numpy as np
 import openap.casadi as oc
-import pandas as pd
 from openap.aero import fpm, ft, kts
 
-from .base import Base
+import pandas as pd
+
 from ._types import LatLon
+from .base import Base
 
 if TYPE_CHECKING:
     from ._options import TrajectoryResult

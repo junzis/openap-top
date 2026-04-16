@@ -2,9 +2,9 @@
 
 import dataclasses
 
-import pandas as pd
 import pytest
 
+import pandas as pd
 from opentop._options import GridOptions, SolveOptions, TrajectoryResult
 
 

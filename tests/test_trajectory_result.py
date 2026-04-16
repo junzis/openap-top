@@ -6,10 +6,10 @@ API and the opt-in TrajectoryResult return.
 
 import math
 
-import pandas as pd
 import pytest
 
 import opentop as top
+import pandas as pd
 from opentop._options import TrajectoryResult
 
 

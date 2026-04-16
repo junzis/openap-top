@@ -9,10 +9,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional
 
-import numpy as np
 import openap
-import pandas as pd
 from openap.aero import fpm, ft, kts
+
+import numpy as np
+import pandas as pd
 
 from . import _objectives
 

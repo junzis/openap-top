@@ -38,13 +38,11 @@ issues = "https://github.com/junzis/opentop/issues"
 
 [dependency-groups]
 dev = [
-    "flake8>=7.3",
-    "black>=26.3",
-    "isort>=8.0",
+    "ruff>=0.14",
     "ipykernel>=7.2",
-    # "mypy>=0.991",
     "pytest>=9.0",
     "pytest-xdist>=3.8",
+    "pre-commit>=4.0",
 ]
 
 [tool.ruff]
