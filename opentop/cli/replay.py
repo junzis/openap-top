@@ -97,13 +97,28 @@ def replay(
     import pandas as pd
     from opentop import replay as replay_mod
 
-    # No positional arg → would dispatch to wizard (Task 10)
+    # No positional arg → dispatch to interactive wizard
     if callsign is None and from_file is None:
-        click.echo(
-            "CALLSIGN is required. Interactive wizard arrives in the next release.",
-            err=True,
-        )
-        sys.exit(1)
+        from ._interactive import run_wizard
+
+        opts = run_wizard()
+        if opts is None:
+            sys.exit(0)
+        callsign = opts["callsign"]
+        date_ = opts.get("date")
+        start = opts.get("start")
+        stop = opts.get("stop")
+        from_file = opts.get("from_file")
+        aircraft = opts.get("aircraft")
+        m0 = opts["m0"]
+        phase = opts["phase"]
+        objective = opts["objective"]
+        max_iter = opts["max_iter"]
+        no_wind = opts["no_wind"]
+        sigma = opts["sigma"]
+        era5_store = opts["era5_store"]
+        output_dir = opts["output_dir"]
+        debug = opts["debug"]
 
     # Dep guard
     need_opensky = from_file is None
