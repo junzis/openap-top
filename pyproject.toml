@@ -28,6 +28,14 @@ dependencies = [
     # "ecmwflibs>=0.6",
 ]
 
+[project.optional-dependencies]
+replay = [
+    "traffic>=2",
+    "fastmeteo>=0.3",
+    "scipy>=1",
+    "pandas<3",
+]
+
 [project.scripts]
 opentop = "opentop.cli:main"
 

@@ -245,6 +245,32 @@ The resulting `.casadi` file loads in under a second (vs. minutes to rebuild a b
 
 Use `opentop --help`, `opentop optimize --help`, and `opentop gengrid --help` for the full option list.
 
+### `opentop replay`
+
+Replay a real flight by callsign: pulls trajectory from OpenSky, ERA5 meteo
+from fastmeteo, and runs an optimization side-by-side with the actual flight.
+
+```sh
+# Install with the replay extras
+pip install "opentop[replay]"
+
+# Flag mode
+opentop replay RYR880W --date 2023-01-05 --obj fuel -o ./results/
+
+# Interactive wizard (no arguments)
+opentop replay
+```
+
+Outputs under the output directory:
+- `actual.parquet` — cleaned OpenSky trace
+- `optimized.parquet` — optimized trajectory
+- `trajectory.png` — actual-vs-optimized overlay
+
+Requires OpenSky credentials at `~/.config/traffic/traffic.conf` (see
+traffic's docs). ERA5 data is fetched via fastmeteo's ArcoEra5; the default
+local store is `<system tmp>/opentop-era5` — first use will download several
+GB on a large bbox.
+
 ## Accessing Solver Results
 
 After calling `.trajectory()`, the optimizer exposes:
