@@ -1,7 +1,6 @@
 """Structured options for trajectory optimization and result packaging.
 
 These dataclasses replace the **kwargs dict plumbing in Base.trajectory.
-Task 22 (next) rewrites Base.trajectory to consume these.
 """
 
 from __future__ import annotations

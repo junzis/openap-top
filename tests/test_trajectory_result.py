@@ -81,3 +81,25 @@ def test_result_object_df_matches_default_return():
     assert abs(float(opt1.objective_value) - r.objective) < 1e-6
     # Row count should match exactly.
     assert len(df_direct) == len(r.df)  # type: ignore[arg-type]  # trajectory() without result_object always returns DataFrame
+
+
+def test_solver_property_emits_deprecation_warning():
+    """`optimizer.solver` is deprecated; accessing it emits DeprecationWarning.
+
+    Scheduled for removal in v2.3 per the migration notes in the README.
+    This test pins the warning so we don't silently drop it.
+    """
+    import warnings
+
+    opt = top.Cruise("A320", (52.308, 4.764), (50.033, 8.570), m0=0.85)
+    opt.setup(max_iter=300)
+    _ = opt.trajectory(objective="fuel")
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _ = opt.solver
+    assert any(
+        issubclass(w.category, DeprecationWarning)
+        and "solver" in str(w.message).lower()
+        for w in caught
+    ), f"expected DeprecationWarning on opt.solver; got {caught}"
