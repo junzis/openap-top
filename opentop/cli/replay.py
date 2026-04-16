@@ -5,7 +5,13 @@ from __future__ import annotations
 # Force non-interactive matplotlib backend BEFORE any import that may pull
 # matplotlib.pyplot (opentop.__init__ eagerly imports opentop.vis which
 # imports pyplot, which locks in the default Tk backend and crashes in
-# headless / SSH environments without $DISPLAY).
+# headless / SSH environments without $DISPLAY). We set both the env var
+# (read at matplotlib first-import) and matplotlib.use (read on first
+# pyplot.figure()) for belt-and-suspenders.
+import os
+
+os.environ.setdefault("MPLBACKEND", "Agg")
+
 import matplotlib
 
 matplotlib.use("Agg")
