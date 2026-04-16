@@ -24,13 +24,6 @@ Usage (requires ERA5 Zarr store on disk or network):
 The default ERA5 store path is /tmp/era5-zarr (ArcoEra5 will download
 data from ARCO on first use, which may take some time for large grids).
 Pass --era5-store to override.
-
-The script does NOT depend on `traffic` unless --from-callsign is used.
-The default mode builds a rectangular bbox grid directly from origin/dest
-lat-lon bounds, skipping the need for a real flight trajectory.
-
-Optional extras (only needed for --from-callsign path):
-    traffic  -- OpenSky flight history queries
 """
 
 from __future__ import annotations
@@ -135,15 +128,11 @@ def build_meteo_grid(
         latitudes, longitudes, altitudes, timestamps
     )
 
-    grid = (
-        __import__("pandas")
-        .DataFrame()
-        .assign(
-            latitude=latitudes.flatten(),
-            longitude=longitudes.flatten(),
-            altitude=altitudes.flatten(),
-            timestamp=times.flatten(),
-        )
+    grid = pd.DataFrame().assign(
+        latitude=latitudes.flatten(),
+        longitude=longitudes.flatten(),
+        altitude=altitudes.flatten(),
+        timestamp=times.flatten(),
     )
 
     meteo = era5.interpolate(grid)
@@ -165,7 +154,6 @@ def build_interpolant(
     sigma: int,
     out: str,
     era5_store: str = "/tmp/era5-zarr",
-    callsign: str | None = None,
 ):
     """Full pipeline: ERA5 → contrail flags → Gaussian smoothing → bspline.
 
@@ -177,99 +165,29 @@ def build_interpolant(
         sigma: Gaussian smoothing sigma applied over (height, lat, lon) axes.
         out:   Output path for the .casadi interpolant file.
         era5_store: Local Zarr store path for ArcoEra5.
-        callsign: If given, load a real flight from OpenSky (requires
-            `traffic`) and use its actual bbox/time extents instead.
     """
     from openap import aero
     from scipy.ndimage import gaussian_filter
 
-    import numpy as np
     import opentop.tools as tools
 
     print(f"Building contrail interpolant → {out}", file=sys.stderr)
 
-    # ------------------------------------------------------------------
-    # 1. Pull meteo grid (real flight via OpenSky, or rectangular bbox)
-    # ------------------------------------------------------------------
-    if callsign is not None:
-        try:
-            from traffic.core import Flight
-            from traffic.data import opensky
-
-            import pandas as pd
-        except ImportError as exc:
-            raise ImportError(
-                "The `traffic` package is required for --from-callsign. "
-                "Install it with: pip install traffic"
-            ) from exc
-
-        print(f"  Fetching OpenSky history for callsign {callsign!r}…", file=sys.stderr)
-        flight_0 = opensky.history(start, stop, callsign=callsign, return_flight=True)
-        if flight_0 is None or flight_0.data.empty:
-            raise ValueError(f"No flight data retrieved for callsign {callsign!r}.")
-
-        counts = flight_0.data["icao24"].value_counts()
-        main_icao24 = counts.idxmax()
-        flight = Flight(
-            flight_0.data[flight_0.data["icao24"] == main_icao24]
-            .drop(["last_position", "onground"], axis=1, errors="ignore")
-            .query("latitude.notnull()")
-            .copy()
-        )
-        if flight.data.empty:
-            raise ValueError("Flight has no valid trajectory points after filtering.")
-
-        origin_lat = float(flight.data.latitude.iloc[0])
-        origin_lon = float(flight.data.longitude.iloc[0])
-        dest_lat = float(flight.data.latitude.iloc[-1])
-        dest_lon = float(flight.data.longitude.iloc[-1])
-        start = str(flight.data.timestamp.iloc[0])
-        stop = str(flight.data.timestamp.iloc[-1])
-
-        from fastmeteo.source import ArcoEra5
-
-        era5 = ArcoEra5(local_store=era5_store)
-
-        stop_padded = pd.Timestamp(stop) + pd.Timedelta(hours=3)
-        timestamps = pd.date_range(start, stop_padded, freq="1h")
-
-        latmin = math.ceil(min(origin_lat, dest_lat)) - 2
-        latmax = math.ceil(max(origin_lat, dest_lat)) + 2
-        lonmin = math.ceil(min(origin_lon, dest_lon)) - 4
-        lonmax = math.ceil(max(origin_lon, dest_lon)) + 4
-
-        latitudes = np.arange(latmin, latmax, 1)
-        longitudes = np.arange(lonmin, lonmax, 1)
-        altitudes = np.arange(1000, 46000, 1500)
-
-        lats, lons, alts, times = np.meshgrid(
-            latitudes, longitudes, altitudes, timestamps
-        )
-
-        grid = pd.DataFrame().assign(
-            latitude=lats.flatten(),
-            longitude=lons.flatten(),
-            altitude=alts.flatten(),
-            timestamp=times.flatten(),
-        )
-        meteo = era5.interpolate(grid)
-
-    else:
-        print(
-            f"  Building rectangular ERA5 grid for "
-            f"({origin_lat:.3f},{origin_lon:.3f})→({dest_lat:.3f},{dest_lon:.3f}) "
-            f"{start} - {stop}",
-            file=sys.stderr,
-        )
-        meteo = build_meteo_grid(
-            origin_lat,
-            origin_lon,
-            dest_lat,
-            dest_lon,
-            start,
-            stop,
-            era5_store=era5_store,
-        )
+    print(
+        f"  Building rectangular ERA5 grid for "
+        f"({origin_lat:.3f},{origin_lon:.3f})→({dest_lat:.3f},{dest_lon:.3f}) "
+        f"{start} - {stop}",
+        file=sys.stderr,
+    )
+    meteo = build_meteo_grid(
+        origin_lat,
+        origin_lon,
+        dest_lat,
+        dest_lon,
+        start,
+        stop,
+        era5_store=era5_store,
+    )
 
     print(f"  Meteo grid: {len(meteo):,} rows", file=sys.stderr)
 
@@ -397,16 +315,6 @@ def main():
             "First run downloads ERA5 data (~GB) from ARCO."
         ),
     )
-    parser.add_argument(
-        "--from-callsign",
-        default=None,
-        metavar="CALLSIGN",
-        help=(
-            "Load a real flight from OpenSky by callsign (requires `traffic`). "
-            "When set, --origin/--dest lat-lon are ignored for bbox computation; "
-            "the actual flight trajectory determines the grid extent."
-        ),
-    )
 
     args = parser.parse_args()
 
@@ -423,7 +331,6 @@ def main():
         sigma=args.sigma,
         out=args.out,
         era5_store=args.era5_store,
-        callsign=args.from_callsign,
     )
 
 
