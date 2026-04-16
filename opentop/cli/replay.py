@@ -163,7 +163,10 @@ def replay(
 
     # Default output dir
     if output_dir is None:
-        date_tag = pd.Timestamp(start).strftime("%Y-%m-%d")
+        try:
+            date_tag = pd.Timestamp(start).strftime("%Y-%m-%d")  # type: ignore[union-attr]
+        except (ValueError, AttributeError):
+            date_tag = "unknown"
         cs_tag = callsign or "flight"
         output_dir = Path(f"./replay_{cs_tag}_{date_tag}")
 
