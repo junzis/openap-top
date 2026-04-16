@@ -227,7 +227,9 @@ def _pad_altitudes(df: pd.DataFrame) -> pd.DataFrame:
     if not missing:
         return df
 
-    grouping_cols = [c for c in ("timestamp", "ts", "latitude", "longitude") if c in df.columns]
+    grouping_cols = [
+        c for c in ("timestamp", "ts", "latitude", "longitude") if c in df.columns
+    ]
     base = df[grouping_cols].drop_duplicates()
 
     pads = []
@@ -259,8 +261,13 @@ def main() -> None:
 @click.argument("origin")
 @click.argument("destination")
 @click.option("-a", "--aircraft", required=True, help="Aircraft type, e.g. A320.")
-@click.option("--m0", type=float, default=0.85, show_default=True,
-              help="Initial mass ratio (fraction of MTOW).")
+@click.option(
+    "--m0",
+    type=float,
+    default=0.85,
+    show_default=True,
+    help="Initial mass ratio (fraction of MTOW).",
+)
 @click.option(
     "--phase",
     type=click.Choice(["all", "cruise", "climb", "descent"]),
@@ -268,14 +275,32 @@ def main() -> None:
     show_default=True,
     help="Flight phase (all = CompleteFlight).",
 )
-@click.option("--obj", "objective", default="fuel", show_default=True,
-              help='Objective expression, e.g. "fuel", "ci:30", "0.3*fuel+0.7*grid".')
-@click.option("--grid", "grid_path", type=click.Path(exists=True, path_type=Path),
-              help="Grid cost file (.casadi preferred, .parquet also accepted).")
-@click.option("--max-iter", type=int, default=1500, show_default=True,
-              help="Maximum IPOPT iterations.")
-@click.option("-o", "--output", type=click.Path(path_type=Path),
-              help="Save trajectory to this parquet file (stdout summary only if omitted).")
+@click.option(
+    "--obj",
+    "objective",
+    default="fuel",
+    show_default=True,
+    help='Objective expression, e.g. "fuel", "ci:30", "0.3*fuel+0.7*grid".',
+)
+@click.option(
+    "--grid",
+    "grid_path",
+    type=click.Path(exists=True, path_type=Path),
+    help="Grid cost file (.casadi preferred, .parquet also accepted).",
+)
+@click.option(
+    "--max-iter",
+    type=int,
+    default=1500,
+    show_default=True,
+    help="Maximum IPOPT iterations.",
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(path_type=Path),
+    help="Save trajectory to this parquet file (stdout summary only if omitted).",
+)
 @click.option("-v", "--debug", is_flag=True, help="Verbose IPOPT output.")
 def optimize(
     origin: str,
@@ -350,20 +375,40 @@ def optimize(
 
 
 @main.command()
-@click.option("--in", "input_path", required=True,
-              type=click.Path(exists=True, path_type=Path),
-              help="Input grid file (parquet).")
-@click.option("--out", "output_path", required=True, type=click.Path(path_type=Path),
-              help="Output .casadi cache file.")
+@click.option(
+    "--in",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="Input grid file (parquet).",
+)
+@click.option(
+    "--out",
+    "output_path",
+    required=True,
+    type=click.Path(path_type=Path),
+    help="Output .casadi cache file.",
+)
 @click.option("--bbox", help="Spatial bbox as LAT_MIN:LAT_MAX,LON_MIN:LON_MAX.")
-@click.option("--time", "time_window",
-              help="Time window as START,STOP (ISO-format timestamps, UTC assumed).")
-@click.option("--pad-altitudes/--no-pad-altitudes", default=True, show_default=True,
-              help="Extend altitude coverage with zero-cost rows from 0 to FL480.")
-@click.option("--shape", type=click.Choice(["linear", "bspline"]),
-              default="bspline", show_default=True,
-              help="Interpolant type. 'bspline' has smooth gradients and is strongly "
-                   "preferred for CompleteFlight solves.")
+@click.option(
+    "--time",
+    "time_window",
+    help="Time window as START,STOP (ISO-format timestamps, UTC assumed).",
+)
+@click.option(
+    "--pad-altitudes/--no-pad-altitudes",
+    default=True,
+    show_default=True,
+    help="Extend altitude coverage with zero-cost rows from 0 to FL480.",
+)
+@click.option(
+    "--shape",
+    type=click.Choice(["linear", "bspline"]),
+    default="bspline",
+    show_default=True,
+    help="Interpolant type. 'bspline' has smooth gradients and is strongly "
+    "preferred for CompleteFlight solves.",
+)
 def gengrid(
     input_path: Path,
     output_path: Path,
@@ -386,19 +431,23 @@ def gengrid(
 
     if bbox is not None:
         lat_min, lat_max, lon_min, lon_max = _parse_bbox(bbox)
-        df = cast(pd.DataFrame, df[
-            (df.latitude >= lat_min)
-            & (df.latitude <= lat_max)
-            & (df.longitude >= lon_min)
-            & (df.longitude <= lon_max)
-        ].copy())
+        df = cast(
+            pd.DataFrame,
+            df[
+                (df.latitude >= lat_min)
+                & (df.latitude <= lat_max)
+                & (df.longitude >= lon_min)
+                & (df.longitude <= lon_max)
+            ].copy(),
+        )
         click.echo(f"  after bbox slice: {df.shape}")
 
     if pad_altitudes:
         before = df.shape[0]
         df = _pad_altitudes(df)
-        click.echo(f"  after altitude padding: {df.shape} "
-                   f"(+{df.shape[0] - before} rows)")
+        click.echo(
+            f"  after altitude padding: {df.shape} (+{df.shape[0] - before} rows)"
+        )
 
     click.echo(f"\nBuilding {shape} interpolant ({df.shape[0]:,} points)...")
     t0 = time.time()

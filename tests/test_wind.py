@@ -3,6 +3,7 @@
 Pins the Cruise.enable_wind → PolyWind → xdot wind branch. Uses a synthetic
 constant-tailwind field so the solver's behaviour is predictable.
 """
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -19,10 +20,16 @@ def constant_tailwind_df():
         for lat in np.linspace(48, 55, 5):
             for h in (1000, 5000, 10000, 12000):
                 for ts in (0, 18000, 36000):
-                    rows.append({
-                        "longitude": lon, "latitude": lat, "h": h,
-                        "ts": ts, "u": 10.0, "v": 0.0,
-                    })
+                    rows.append(
+                        {
+                            "longitude": lon,
+                            "latitude": lat,
+                            "h": h,
+                            "ts": ts,
+                            "u": 10.0,
+                            "v": 0.0,
+                        }
+                    )
     return pd.DataFrame(rows)
 
 
@@ -38,5 +45,6 @@ def test_cruise_with_constant_tailwind_converges(constant_tailwind_df):
     # Realistic cruise altitude (above FL300 / ~9100 m).
     # trajectory() without result_object=True always returns a DataFrame.
     assert isinstance(df, pd.DataFrame)
-    assert df["altitude"].max() > 9_000 * 3.28084, \
+    assert df["altitude"].max() > 9_000 * 3.28084, (
         f"max altitude too low: {df['altitude'].max()} ft"
+    )

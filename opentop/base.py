@@ -156,7 +156,9 @@ class Base:
             )
         return bool(self._last_solution.stats()["success"])
 
-    def proj(self, lon: Any, lat: Any, inverse: bool = False, symbolic: bool = False) -> Any:
+    def proj(
+        self, lon: Any, lat: Any, inverse: bool = False, symbolic: bool = False
+    ) -> Any:
         """Project between lon/lat and local cartesian coordinates.
 
         Uses azimuthal equidistant projection centered between origin
@@ -190,7 +192,9 @@ class Base:
             lat, lon = geo.latlon(lat0, lon0, distances, bearing)
             return lon, lat
 
-    def _compute_bbox(self, margin_m: float = 10_000) -> tuple[float, float, float, float]:
+    def _compute_bbox(
+        self, margin_m: float = 10_000
+    ) -> tuple[float, float, float, float]:
         """Compute projected bounding box around origin/destination with margin.
 
         Returns (x_min, x_max, y_min, y_max) in projected meters.
@@ -220,7 +224,10 @@ class Base:
                 [xp, yp, h, mass, ts].
         """
         return _dynamics.great_circle_init(
-            self.lat1, self.lon1, self.lat2, self.lon2,
+            self.lat1,
+            self.lon1,
+            self.lat2,
+            self.lon2,
             n_nodes=self.nodes,
             mass_init=self.mass_init,
             aircraft=self.aircraft,
@@ -258,7 +265,8 @@ class Base:
             ca.MX: State derivatives [dx, dy, dh, dm, dt].
         """
         return _dynamics.xdot(
-            x, u,
+            x,
+            u,
             fuelflow=self.fuelflow,
             dT=self.dT,
             wind=self.wind,
@@ -365,9 +373,7 @@ class Base:
             resolved = _objectives.resolve_objective(objective)
             ctx = self._objective_ctx()
             ctx.update(kwargs)
-            self.objective = lambda x, u, dt, **kw: resolved(
-                x, u, dt, **{**ctx, **kw}
-            )
+            self.objective = lambda x, u, dt, **kw: resolved(x, u, dt, **{**ctx, **kw})
             L = resolved(self.x, self.u, self.dt, **ctx)
 
         # Continuous time dynamics
@@ -408,9 +414,7 @@ class Base:
         if not isinstance(objective, Callable):
             try:
                 resolved = _objectives.resolve_objective(objective)
-                needs_exact_hessian = getattr(
-                    resolved, "requires_exact_hessian", False
-                )
+                needs_exact_hessian = getattr(resolved, "requires_exact_hessian", False)
             except (ValueError, TypeError):
                 # Defer the error until init_model so the message matches the
                 # existing dispatch path.
@@ -596,7 +600,9 @@ class Base:
             "calc_emission": self._calc_emission,
         }
 
-    def obj_fuel(self, x: ca.MX, u: ca.MX, dt: ca.MX, symbolic: bool = True, **kwargs: Any) -> ca.MX:
+    def obj_fuel(
+        self, x: ca.MX, u: ca.MX, dt: ca.MX, symbolic: bool = True, **kwargs: Any
+    ) -> ca.MX:
         """Fuel burn objective: fuelflow * dt. Delegates to _objectives."""
         ctx = self._objective_ctx()
         ctx.update(kwargs)
@@ -606,7 +612,16 @@ class Base:
         """Minimum time objective. Delegates to _objectives."""
         return _objectives.obj_time(x, u, dt, **kwargs)
 
-    def obj_ci(self, x: ca.MX, u: ca.MX, dt: ca.MX, ci: float, time_price: float = 25, fuel_price: float = 0.8, **kwargs: Any) -> ca.MX:
+    def obj_ci(
+        self,
+        x: ca.MX,
+        u: ca.MX,
+        dt: ca.MX,
+        ci: float,
+        time_price: float = 25,
+        fuel_price: float = 0.8,
+        **kwargs: Any,
+    ) -> ca.MX:
         """Cost index objective blending time and fuel costs.
 
         Args:
@@ -617,12 +632,18 @@ class Base:
         ctx = self._objective_ctx()
         ctx.update(kwargs)
         return _objectives.obj_ci(
-            x, u, dt,
-            ci=ci, time_price=time_price, fuel_price=fuel_price,
+            x,
+            u,
+            dt,
+            ci=ci,
+            time_price=time_price,
+            fuel_price=fuel_price,
             **ctx,
         )
 
-    def _obj_climate(self, x: ca.MX, u: ca.MX, dt: ca.MX, metric: str, **kwargs: Any) -> ca.MX:
+    def _obj_climate(
+        self, x: ca.MX, u: ca.MX, dt: ca.MX, metric: str, **kwargs: Any
+    ) -> ca.MX:
         """Climate impact objective using GWP/GTP metric coefficients."""
         ctx = self._objective_ctx()
         ctx.update(kwargs)
@@ -638,11 +659,11 @@ class Base:
                 n_dim: Input dimension, 3 (lon,lat,h) or 4 (+ts). Default 3.
                 time_dependent: Multiply cost by dt. Default True.
         """
-        return _objectives.obj_grid_cost(
-            x, u, dt, proj=self.proj, **kwargs
-        )
+        return _objectives.obj_grid_cost(x, u, dt, proj=self.proj, **kwargs)
 
-    def to_trajectory(self, ts_final: float, x_opt: np.ndarray, u_opt: np.ndarray, **kwargs: Any) -> pd.DataFrame:
+    def to_trajectory(
+        self, ts_final: float, x_opt: np.ndarray, u_opt: np.ndarray, **kwargs: Any
+    ) -> pd.DataFrame:
         """Convert optimization results to a trajectory DataFrame.
 
         Args:
@@ -689,8 +710,17 @@ class Base:
         rejected solve); it is coerced to an empty DataFrame in the result.
         """
         from ._options import build_result
-        stats = dict(self._last_solution.stats()) if getattr(self, "_last_solution", None) else {}
-        obj = float(self.objective_value) if self.objective_value is not None else float("nan")
+
+        stats = (
+            dict(self._last_solution.stats())
+            if getattr(self, "_last_solution", None)
+            else {}
+        )
+        obj = (
+            float(self.objective_value)
+            if self.objective_value is not None
+            else float("nan")
+        )
         return build_result(df, stats, obj)
 
     def multi_start_trajectory(
@@ -699,4 +729,5 @@ class Base:
         **kwargs: Any,
     ) -> tuple[pd.DataFrame, list[dict]]:
         from . import _multi_start
+
         return _multi_start.run_multi_start(self, objective, **kwargs)

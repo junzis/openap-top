@@ -91,7 +91,7 @@ def test_complete_flight_return_failed_returns_df_on_tight_fuel_budget():
 
     df = opt.trajectory(
         objective="fuel",
-        max_fuel=100.0,          # physically impossible for EHAM→EDDF
+        max_fuel=100.0,  # physically impossible for EHAM→EDDF
         return_failed=True,
     )
     # Regardless of whether the solver fails outright or returns a degenerate
@@ -103,4 +103,3 @@ def test_complete_flight_return_failed_returns_df_on_tight_fuel_budget():
         "max_fuel=100 should be infeasible; if this passes, something is wrong "
         "with the solver or route"
     )
-

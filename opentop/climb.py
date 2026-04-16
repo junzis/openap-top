@@ -61,7 +61,9 @@ class Climb(Base):
             dT=dT,
         )
 
-    def init_conditions(self, df_cruise: pd.DataFrame, alt_stop: float | None = None) -> None:
+    def init_conditions(
+        self, df_cruise: pd.DataFrame, alt_stop: float | None = None
+    ) -> None:
         """Initialize direct collocation bounds and guesses.
 
         Args:

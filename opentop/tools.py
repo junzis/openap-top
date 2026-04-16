@@ -98,7 +98,7 @@ class PolyWind:
         self._poly.fit(X_train)
         ridge = Ridge()
         ridge.fit(self._poly.transform(X_train), df[["u", "v"]].values)
-        self._coef: np.ndarray = np.asarray(ridge.coef_)          # shape (2, n_features)
+        self._coef: np.ndarray = np.asarray(ridge.coef_)  # shape (2, n_features)
         self._intercept: np.ndarray = np.asarray(ridge.intercept_)  # shape (2,)
 
     def _feature_vec(
@@ -110,7 +110,7 @@ class PolyWind:
     ) -> np.ndarray | list[Symbolic]:
         """Build feature row. Polymorphic: numeric → np.ndarray; CasADi → list of SX/MX."""
         if isinstance(x, (ca.SX, ca.MX, ca.DM)):
-            powers = self._poly.powers_   # (n_features, 4)
+            powers = self._poly.powers_  # (n_features, 4)
             feats = []
             for row in powers:
                 term = 1
@@ -121,7 +121,9 @@ class PolyWind:
                 feats.append(term)
             return feats
         else:
-            return np.asarray(self._poly.transform(np.array([[x, y, h, ts]], dtype=float)))[0]
+            return np.asarray(
+                self._poly.transform(np.array([[x, y, h, ts]], dtype=float))
+            )[0]
 
     def calc_u(
         self,
@@ -197,9 +199,7 @@ def construct_interpolant(
         )
 
 
-def interpolant_from_dataframe(
-    df: pd.DataFrame, shape: str = "bspline"
-) -> ca.Function:
+def interpolant_from_dataframe(df: pd.DataFrame, shape: str = "bspline") -> ca.Function:
     """Construct a CasADi interpolant from a DataFrame.
 
     DataFrame must have columns: longitude, latitude, height (m), cost.

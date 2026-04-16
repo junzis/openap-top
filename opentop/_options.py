@@ -3,6 +3,7 @@
 These dataclasses replace the **kwargs dict plumbing in Base.trajectory.
 Task 22 (next) rewrites Base.trajectory to consume these.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -15,6 +16,7 @@ import pandas as pd
 @dataclass(frozen=True, slots=True)
 class SolveOptions:
     """Options consumed by Base._run / Base._build_opti / Base._solve."""
+
     max_iter: int = 1500
     max_fuel: Optional[float] = None
     auto_rescale_objective: bool = True
@@ -29,6 +31,7 @@ class SolveOptions:
 @dataclass(frozen=True, slots=True)
 class GridOptions:
     """Options for grid-cost objectives."""
+
     interpolant: Optional[ca.Function] = None
     n_dim: int = 3
     time_dependent: bool = False
@@ -37,6 +40,7 @@ class GridOptions:
 @dataclass(frozen=True, slots=True)
 class TrajectoryResult:
     """Rich result of a trajectory optimization. Returned when trajectory(result_object=True)."""
+
     df: pd.DataFrame
     success: bool
     status: str
@@ -67,9 +71,7 @@ def build_result(df, stats: dict, objective: float) -> TrajectoryResult:
         ),
         grid_cost=(
             float(df["grid_cost"].sum(skipna=True))
-            if has_df
-            and "grid_cost" in df.columns
-            and df["grid_cost"].notna().any()
+            if has_df and "grid_cost" in df.columns and df["grid_cost"].notna().any()
             else float("nan")
         ),
         stats=stats,

@@ -75,13 +75,16 @@ class TestCruise:
         assert df.mass.iloc[-1] < df.mass.iloc[0]
 
 
-def test_cruise_initial_guess_is_honored_with_no_double_init(aircraft_type, short_flight):
+def test_cruise_initial_guess_is_honored_with_no_double_init(
+    aircraft_type, short_flight
+):
     """Guard: passing initial_guess= must not require x_guess to be built twice.
 
     This pins the post-fix behavior -- init_conditions is called once, the guess
     is honored, and trajectory converges.
     """
     import opentop as top
+
     opt = top.Cruise(
         aircraft_type,
         short_flight["origin"],

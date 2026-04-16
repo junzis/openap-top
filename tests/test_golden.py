@@ -5,6 +5,7 @@ Phase 3 / Phase 4 commit changed the optimization outcome on the
 canonical EHAM→LGAV route. Investigate before proceeding — the refactor
 is not meant to shift optima by more than noise.
 """
+
 import json
 from pathlib import Path
 
@@ -37,6 +38,4 @@ def test_complete_flight_golden_objective_within_1pct():
         f"(baseline recorded at {record['commit_sha']})"
     )
     # Then sanity-check the solver did converge (< max_iter cap).
-    assert opt.success, (
-        f"solver failed: {opt.stats}"
-    )
+    assert opt.success, f"solver failed: {opt.stats}"

@@ -4,6 +4,7 @@ Pins the obj_grid_cost(n_dim=4, time_dependent=True) path before Phase 3
 restructures it. Uses a cached bspline interpolant under tests/fixtures/
 so this test re-runs in ~1s plus solver time.
 """
+
 from pathlib import Path
 
 import pytest
@@ -31,7 +32,9 @@ def test_cruise_with_4d_grid_cost_converges(interp_4d):
 
     def blended(x, u, dt, **kwargs):
         grid = opt.obj_grid_cost(
-            x, u, dt,
+            x,
+            u,
+            dt,
             interpolant=kwargs["interpolant"],
             n_dim=4,
             time_dependent=True,

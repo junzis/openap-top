@@ -10,6 +10,7 @@ have large negative NOx/SOx coefficients that dominate at cruise, making
 the physical objective negative. Finiteness and non-zero are the invariants
 we can assert uniformly; positivity is metric-dependent.
 """
+
 import math
 
 import pytest
@@ -30,13 +31,15 @@ def test_climate_objective_finite_and_positive(metric):
     df = opt.trajectory(objective=metric)
 
     assert df is not None, f"{metric}: trajectory returned None"
-    assert opt.success, \
-        f"{metric}: solver failed: {opt.stats}"
+    assert opt.success, f"{metric}: solver failed: {opt.stats}"
     assert opt.objective_value is not None, f"{metric}: objective_value is None"
-    assert math.isfinite(opt.objective_value), \
+    assert math.isfinite(opt.objective_value), (
         f"{metric}: objective is not finite: {opt.objective_value}"
-    assert opt.objective_value != 0, \
+    )
+    assert opt.objective_value != 0, (
         f"{metric}: objective is zero: {opt.objective_value}"
+    )
     if metric in _POSITIVE_METRICS:
-        assert opt.objective_value > 0, \
+        assert opt.objective_value > 0, (
             f"{metric}: GWP objective non-positive: {opt.objective_value}"
+        )

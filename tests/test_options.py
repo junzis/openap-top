@@ -1,4 +1,5 @@
 """Unit tests for the _options dataclasses."""
+
 import dataclasses
 
 import pandas as pd
@@ -55,15 +56,21 @@ def test_trajectory_result_construction():
     assert r.objective == 1.0
     assert r.iters == 10
     assert r.fuel == 100.0
-    assert r.grid_cost != r.grid_cost   # NaN check
+    assert r.grid_cost != r.grid_cost  # NaN check
     assert len(r.df) == 2
     assert r.stats == {"iter_count": 10}
 
 
 def test_trajectory_result_is_frozen():
     r = TrajectoryResult(
-        df=pd.DataFrame(), success=True, status="ok", objective=0.0,
-        iters=0, fuel=0.0, grid_cost=0.0, stats={},
+        df=pd.DataFrame(),
+        success=True,
+        status="ok",
+        objective=0.0,
+        iters=0,
+        fuel=0.0,
+        grid_cost=0.0,
+        stats={},
     )
     with pytest.raises(dataclasses.FrozenInstanceError):
         r.success = False  # type: ignore[misc]

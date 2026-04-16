@@ -1,4 +1,5 @@
 """Pin PolyWind numeric and symbolic output. Regression guard for the eval() rewrite."""
+
 import casadi as ca
 import numpy as np
 import pandas as pd
@@ -14,8 +15,16 @@ def _fake_wind_df():
         for lat in np.linspace(45, 55, 4):
             for h in (1000, 5000, 10000):
                 for ts in (0, 3600):
-                    rows.append({"longitude": lon, "latitude": lat, "h": h,
-                                 "ts": ts, "u": 5 + 0.01 * h, "v": 2 - 0.001 * ts})
+                    rows.append(
+                        {
+                            "longitude": lon,
+                            "latitude": lat,
+                            "h": h,
+                            "ts": ts,
+                            "u": 5 + 0.01 * h,
+                            "v": 2 - 0.001 * ts,
+                        }
+                    )
     return pd.DataFrame(rows)
 
 

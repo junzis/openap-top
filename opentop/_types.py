@@ -2,6 +2,7 @@
 
 Re-exported from modules that need polymorphic numeric / symbolic types.
 """
+
 from __future__ import annotations
 
 from typing import Callable, Union

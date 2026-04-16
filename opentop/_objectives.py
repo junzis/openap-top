@@ -10,15 +10,17 @@ need IPOPT's exact Hessian for numerical stability (e.g., grid-cost using
 bspline interpolants). ``Base._build_opti`` consults this flag to wire the
 solver option instead of mutating ``solver_options`` as a side effect.
 """
+
 from __future__ import annotations
 
 from typing import Any, Callable, Union
 
 import casadi as ca
-import numpy as np
 import openap
 import openap.casadi as oc
 from openap.aero import fpm, ft, kts
+
+import numpy as np
 
 from ._types import ObjectiveFn, Symbolic
 
@@ -138,8 +140,7 @@ def obj_climate(
     """
     if metric not in _CLIMATE_COEFF:
         raise ValueError(
-            f"Unknown climate metric: {metric!r}. "
-            f"Valid: {sorted(_CLIMATE_COEFF)}"
+            f"Unknown climate metric: {metric!r}. Valid: {sorted(_CLIMATE_COEFF)}"
         )
     # ``calc_emission`` (Base._calc_emission) takes only ``symbolic=``; other
     # context entries (fuelflow/dT/proj/etc.) are already bound via self.
@@ -214,6 +215,7 @@ obj_grid_cost = _mark(_obj_grid_cost_impl, exact_hessian=True)
 def _make_climate_entry(metric: str) -> ObjectiveFn:
     def fn(x, u, dt, **kw):
         return obj_climate(x, u, dt, metric=metric, **kw)
+
     fn.__name__ = f"obj_{metric}"
     return _mark(fn)
 
@@ -260,9 +262,6 @@ def resolve_objective(spec: str | Callable[..., object]) -> ObjectiveFn:
         if spec in _OBJECTIVES:
             return _OBJECTIVES[spec]
         raise ValueError(
-            f"Unknown objective: {spec!r}. "
-            f"Valid: {sorted(_OBJECTIVES)} or 'ci:N'."
+            f"Unknown objective: {spec!r}. Valid: {sorted(_OBJECTIVES)} or 'ci:N'."
         )
-    raise TypeError(
-        f"objective must be str or callable, got {type(spec).__name__}"
-    )
+    raise TypeError(f"objective must be str or callable, got {type(spec).__name__}")

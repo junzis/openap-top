@@ -1,4 +1,5 @@
 """CompleteFlight — full-flight (takeoff to landing) trajectory optimizer."""
+
 from __future__ import annotations
 
 import warnings

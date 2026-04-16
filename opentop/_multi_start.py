@@ -2,6 +2,7 @@
 
 Pure functions operating on an optimizer instance passed as argument.
 """
+
 from __future__ import annotations
 
 import time
@@ -41,9 +42,9 @@ def _perturb_guess(
 
     # Lateral: sinusoidal bulge perpendicular to the origin->destination
     # projected vector. sin(0) = sin(pi) = 0 preserves endpoints.
-    if lateral_km != 0.0:   # exact-zero fast path; any non-zero value
-                             # including sub-mm random draws runs the full
-                             # projection so output is consistent
+    if lateral_km != 0.0:  # exact-zero fast path; any non-zero value
+        # including sub-mm random draws runs the full
+        # projection so output is consistent
         lon = df["longitude"].values
         lat = df["latitude"].values
         xp, yp = proj(lon, lat)
@@ -148,18 +149,18 @@ def run_multi_start(
     if n_starts < 1:
         raise ValueError(f"n_starts must be >= 1, got {n_starts}")
     if seed is not None and (not isinstance(seed, int) or seed < 0):
-        raise ValueError(
-            f"seed must be a non-negative integer or None, got {seed!r}"
-        )
+        raise ValueError(f"seed must be a non-negative integer or None, got {seed!r}")
 
     has_interpolant = trajectory_kwargs.get("interpolant") is not None
 
     def _make_candidate(index, df, lat_km, alt_ft, wall_time_s):
-        stats = optimizer._last_solution.stats() if hasattr(optimizer, "_last_solution") else {}
+        stats = (
+            optimizer._last_solution.stats()
+            if hasattr(optimizer, "_last_solution")
+            else {}
+        )
         grid = (
-            float(df["grid_cost"].sum(skipna=True))
-            if has_interpolant
-            else float("nan")
+            float(df["grid_cost"].sum(skipna=True)) if has_interpolant else float("nan")
         )
         return {
             "start_index": index,
@@ -169,8 +170,7 @@ def run_multi_start(
             "success": bool(stats.get("success")),
             "return_status": str(stats.get("return_status", "")),
             "iters": int(stats.get("iter_count", 0)),
-            "perturbation": {"lateral_km": float(lat_km),
-                              "altitude_ft": float(alt_ft)},
+            "perturbation": {"lateral_km": float(lat_km), "altitude_ft": float(alt_ft)},
             "wall_time_s": float(wall_time_s),
             "trajectory": df,
         }

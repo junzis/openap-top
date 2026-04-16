@@ -53,11 +53,38 @@ def prepare_contrail_data():
     ds = xr.open_dataset(str(nc_path)).sel(time="2015-12-18")
 
     level_pressure = [
-        0.0, 10.0, 30.0, 50.0, 70.0, 90.0787, 110.6606, 132.3968,
-        155.7909, 181.1544, 208.6494, 238.3258, 270.1530, 304.0465,
-        339.8891, 377.5467, 416.8789, 457.7442, 500.0, 543.4970,
-        588.0685, 633.5144, 679.5799, 725.9285, 772.1102, 817.5241,
-        861.3757, 902.6287, 939.9520, 971.6610, 995.6532, 1009.3396,
+        0.0,
+        10.0,
+        30.0,
+        50.0,
+        70.0,
+        90.0787,
+        110.6606,
+        132.3968,
+        155.7909,
+        181.1544,
+        208.6494,
+        238.3258,
+        270.1530,
+        304.0465,
+        339.8891,
+        377.5467,
+        416.8789,
+        457.7442,
+        500.0,
+        543.4970,
+        588.0685,
+        633.5144,
+        679.5799,
+        725.9285,
+        772.1102,
+        817.5241,
+        861.3757,
+        902.6287,
+        939.9520,
+        971.6610,
+        995.6532,
+        1009.3396,
     ]
 
     df = (
@@ -69,7 +96,7 @@ def prepare_contrail_data():
             on="lev",
         )
         .assign(height=lambda x: openap.aero.h_isa(x.hPa * 100).round(-2))
-        .assign(longitude=lambda x: ((x.lon + 180) % 360 - 180))
+        .assign(longitude=lambda x: (x.lon + 180) % 360 - 180)
         .query("height<15000")
     )
 
@@ -100,9 +127,7 @@ def make_contrail_objective(optimizer):
         kwargs.pop("n_dim", None)
         kwargs.pop("time_dependent", None)
         contrail_cost = (
-            optimizer.obj_grid_cost(
-                x, u, dt, n_dim=3, time_dependent=False, **kwargs
-            )
+            optimizer.obj_grid_cost(x, u, dt, n_dim=3, time_dependent=False, **kwargs)
             * vtas
             * 1e-3
         )
@@ -112,8 +137,15 @@ def make_contrail_objective(optimizer):
     return objective
 
 
-def run_opt(OptimizerClass, origin, dest, scaling_method, objective="fuel",
-            df_cost=None, fuel_optimal=None):
+def run_opt(
+    OptimizerClass,
+    origin,
+    dest,
+    scaling_method,
+    objective="fuel",
+    df_cost=None,
+    fuel_optimal=None,
+):
     """Run a single optimization and return results."""
     optimizer = OptimizerClass(AIRCRAFT, origin, dest, M0)
 
@@ -150,9 +182,9 @@ def run_opt(OptimizerClass, origin, dest, scaling_method, objective="fuel",
 
 def print_comparison(label, results):
     """Print side-by-side comparison of results."""
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  {label}")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     for method, (df, elapsed, stats, obj_val) in results.items():
         success = stats.get("success", False)
@@ -167,7 +199,9 @@ def print_comparison(label, results):
         if df is not None:
             fuel_burn = df.mass.iloc[0] - df.mass.iloc[-1]
             print(f"    Fuel burn:  {fuel_burn:.1f} kg")
-            print(f"    Alt range:  {df.altitude.min():.0f} - {df.altitude.max():.0f} ft")
+            print(
+                f"    Alt range:  {df.altitude.min():.0f} - {df.altitude.max():.0f} ft"
+            )
             print(f"    Mach range: {df.mach.min():.3f} - {df.mach.max():.3f}")
             print(f"    Total fuel cost:  {df.fuel_cost.sum():.4f}")
         else:
@@ -199,9 +233,9 @@ if __name__ == "__main__":
 
     for origin, dest in ROUTES:
         route_label = f"{origin}-{dest}"
-        print(f"\n\n{'#'*70}")
+        print(f"\n\n{'#' * 70}")
         print(f"  Route: {route_label}")
-        print(f"{'#'*70}")
+        print(f"{'#' * 70}")
 
         # Cruise fuel
         cruise_fuel_results = {}
@@ -219,8 +253,12 @@ if __name__ == "__main__":
         for method in SCALING_METHODS:
             print(f"\n--- Cruise contrail+CO2 {method} ---")
             cruise_cc_results[method] = run_opt(
-                top.Cruise, origin, dest, method,
-                df_cost=df_cost, fuel_optimal=fuel_optimal,
+                top.Cruise,
+                origin,
+                dest,
+                method,
+                df_cost=df_cost,
+                fuel_optimal=fuel_optimal,
             )
         print_comparison(f"Cruise Contrail+CO2 - {route_label}", cruise_cc_results)
 
@@ -240,8 +278,12 @@ if __name__ == "__main__":
         for method in SCALING_METHODS:
             print(f"\n--- CompleteFlight contrail+CO2 {method} ---")
             full_cc_results[method] = run_opt(
-                top.CompleteFlight, origin, dest, method,
-                df_cost=df_cost, fuel_optimal=full_fuel_optimal,
+                top.CompleteFlight,
+                origin,
+                dest,
+                method,
+                df_cost=df_cost,
+                fuel_optimal=full_fuel_optimal,
             )
         print_comparison(
             f"CompleteFlight Contrail+CO2 - {route_label}", full_cc_results

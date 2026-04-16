@@ -80,9 +80,7 @@ class TestInterpolantCache:
         cache_file = tmp_path / "grid.casadi"
         assert not cache_file.exists()
 
-        interp = tools.cached_interpolant_from_dataframe(
-            df, cache_file, shape="linear"
-        )
+        interp = tools.cached_interpolant_from_dataframe(df, cache_file, shape="linear")
         assert cache_file.exists()
 
         val = float(interp(ca.vertcat(0.0, 45.0, 10000.0, 1800.0)))  # type: ignore[arg-type]  # CasADi Function.__call__ return type opaque to pyright
@@ -93,15 +91,11 @@ class TestInterpolantCache:
         cache_file = tmp_path / "grid.casadi"
 
         # First call: builds and saves
-        first = tools.cached_interpolant_from_dataframe(
-            df, cache_file, shape="linear"
-        )
+        first = tools.cached_interpolant_from_dataframe(df, cache_file, shape="linear")
         mtime_first = cache_file.stat().st_mtime
 
         # Second call: should load without rebuilding (cache file untouched)
-        second = tools.cached_interpolant_from_dataframe(
-            df, cache_file, shape="linear"
-        )
+        second = tools.cached_interpolant_from_dataframe(df, cache_file, shape="linear")
         mtime_second = cache_file.stat().st_mtime
         assert mtime_first == mtime_second
 
@@ -114,13 +108,9 @@ class TestInterpolantCache:
         df = _make_grid(n_ts=1).drop(columns=["ts"])
         cache_file = tmp_path / "grid3d.casadi"
 
-        first = tools.cached_interpolant_from_dataframe(
-            df, cache_file, shape="linear"
-        )
+        first = tools.cached_interpolant_from_dataframe(df, cache_file, shape="linear")
         assert cache_file.exists()
 
-        second = tools.cached_interpolant_from_dataframe(
-            df, cache_file, shape="linear"
-        )
+        second = tools.cached_interpolant_from_dataframe(df, cache_file, shape="linear")
         point = ca.vertcat(0.0, 45.0, 10000.0)
         assert float(first(point)) == pytest.approx(float(second(point)), rel=1e-10)  # type: ignore[arg-type]  # CasADi Function.__call__ return type opaque to pyright

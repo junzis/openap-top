@@ -5,6 +5,7 @@ Run once:
 
 The output should be well under 2 MB — small enough to commit.
 """
+
 from pathlib import Path
 
 import numpy as np
@@ -30,8 +31,15 @@ def build():
                         c = 0.0
                     else:
                         c = 0.5 * np.exp(-((lon - 7.5) ** 2 + (lat - 51) ** 2) / 10)
-                    rows.append({"longitude": lon, "latitude": lat,
-                                 "height": h, "ts": ts, "cost": c})
+                    rows.append(
+                        {
+                            "longitude": lon,
+                            "latitude": lat,
+                            "height": h,
+                            "ts": ts,
+                            "cost": c,
+                        }
+                    )
     df = pd.DataFrame(rows)
     out = Path(__file__).parent / "synthetic_4d.casadi"
     tools.cached_interpolant_from_dataframe(df, str(out), shape="bspline")

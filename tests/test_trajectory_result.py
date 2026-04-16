@@ -3,6 +3,7 @@
 These tests pin the Phase-3 Task-22 contract: the new explicit-kwargs
 API and the opt-in TrajectoryResult return.
 """
+
 import math
 
 import pandas as pd

@@ -3,6 +3,7 @@
 No state: every function takes inputs, returns outputs. Base and phase
 classes delegate to these.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -135,8 +136,6 @@ def great_circle_init(
         if "ts" in flight:
             ts_guess = flight.ts
         elif "timestamp" in flight:
-            ts_guess = (
-                flight.timestamp - flight.timestamp.min()
-            ).dt.total_seconds()
+            ts_guess = (flight.timestamp - flight.timestamp.min()).dt.total_seconds()
 
     return np.vstack([xp_guess, yp_guess, h_guess, m_guess, ts_guess]).T

@@ -4,6 +4,7 @@ Turns solver output (numeric state/control arrays plus final time) into the
 trajectory DataFrame. No CasADi symbolic ops, no solver state; context
 (proj, aircraft, wind, etc.) flows in as explicit arguments.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional
@@ -138,18 +139,16 @@ def to_dataframe(
     )
 
     df = df.assign(
-        fuelflow=(
-            fuelflow.enroute(
-                mass=df.mass, tas=tas, alt=alt, vs=vertrate, dT=dT
-            )
-        )
+        fuelflow=(fuelflow.enroute(mass=df.mass, tas=tas, alt=alt, vs=vertrate, dT=dT))
     )
 
     if wind:
-        wu = np.array([wind.calc_u(xi, yi, hi, ti)
-                       for xi, yi, hi, ti in zip(xp, yp, h, ts)])
-        wv = np.array([wind.calc_v(xi, yi, hi, ti)
-                       for xi, yi, hi, ti in zip(xp, yp, h, ts)])
+        wu = np.array(
+            [wind.calc_u(xi, yi, hi, ti) for xi, yi, hi, ti in zip(xp, yp, h, ts)]
+        )
+        wv = np.array(
+            [wind.calc_v(xi, yi, hi, ti) for xi, yi, hi, ti in zip(xp, yp, h, ts)]
+        )
         df = df.assign(wu=wu, wv=wv)
 
     return df, X, U, dt

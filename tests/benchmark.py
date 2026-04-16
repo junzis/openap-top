@@ -66,17 +66,21 @@ def _import_top():
     """
     try:
         import opentop
+
         return opentop
     except ImportError:
         pass
     # v1.x fallback: openap.top lives under the openap namespace
     try:
         from openap import top
+
         return top
     except ImportError:
         import openap
+
         openap.__path__.insert(0, str(REPO_ROOT / "openap"))
         from openap import top
+
         return top
 
 
@@ -149,29 +153,43 @@ def run_benchmarks():
     }
 
     cases = [
-        ("cruise_short_fuel",
-         lambda: top.Cruise("A320", "EHAM", "EDDF", 0.85), "fuel"),
-        ("cruise_medium_fuel",
-         lambda: top.Cruise("A320", "EHAM", "LGAV", 0.85), "fuel"),
-        ("cruise_short_time",
-         lambda: top.Cruise("A320", "EHAM", "EDDF", 0.85), "time"),
-        ("cruise_medium_ci50",
-         lambda: top.Cruise("A320", "EHAM", "LGAV", 0.85), "ci:50"),
-        ("cruise_medium_gwp100",
-         lambda: top.Cruise("A320", "EHAM", "LGAV", 0.85), "gwp100"),
-        ("cruise_medium_gtp100",
-         lambda: top.Cruise("A320", "EHAM", "LGAV", 0.85), "gtp100"),
-        ("complete_short_fuel",
-         lambda: top.CompleteFlight("A320", "EHAM", "EDDF", 0.85), "fuel"),
-        ("complete_medium_fuel",
-         lambda: top.CompleteFlight("A320", "EHAM", "LGAV", 0.85), "fuel"),
+        ("cruise_short_fuel", lambda: top.Cruise("A320", "EHAM", "EDDF", 0.85), "fuel"),
+        (
+            "cruise_medium_fuel",
+            lambda: top.Cruise("A320", "EHAM", "LGAV", 0.85),
+            "fuel",
+        ),
+        ("cruise_short_time", lambda: top.Cruise("A320", "EHAM", "EDDF", 0.85), "time"),
+        (
+            "cruise_medium_ci50",
+            lambda: top.Cruise("A320", "EHAM", "LGAV", 0.85),
+            "ci:50",
+        ),
+        (
+            "cruise_medium_gwp100",
+            lambda: top.Cruise("A320", "EHAM", "LGAV", 0.85),
+            "gwp100",
+        ),
+        (
+            "cruise_medium_gtp100",
+            lambda: top.Cruise("A320", "EHAM", "LGAV", 0.85),
+            "gtp100",
+        ),
+        (
+            "complete_short_fuel",
+            lambda: top.CompleteFlight("A320", "EHAM", "EDDF", 0.85),
+            "fuel",
+        ),
+        (
+            "complete_medium_fuel",
+            lambda: top.CompleteFlight("A320", "EHAM", "LGAV", 0.85),
+            "fuel",
+        ),
     ]
 
     for label, factory, objective in cases:
         print(f"  {label}...", file=sys.stderr, flush=True)
-        results["standard"].append(
-            _run_standard_case(label, factory, objective)
-        )
+        results["standard"].append(_run_standard_case(label, factory, objective))
 
     contrail_nc = REPO_ROOT / "tests" / "tmp" / "contrail.nc"
     if contrail_nc.exists():
@@ -196,24 +214,49 @@ def _run_grid_cost_cases(contrail_nc, top):
 
     ds = xr.open_dataset(str(contrail_nc)).sel(time="2015-12-18")
     level_pressure = [
-        0.0, 10.0, 30.0, 50.0, 70.0, 90.0787, 110.6606, 132.3968,
-        155.7909, 181.1544, 208.6494, 238.3258, 270.1530, 304.0465,
-        339.8891, 377.5467, 416.8789, 457.7442, 500.0, 543.4970,
-        588.0685, 633.5144, 679.5799, 725.9285, 772.1102, 817.5241,
-        861.3757, 902.6287, 939.9520, 971.6610, 995.6532, 1009.3396,
+        0.0,
+        10.0,
+        30.0,
+        50.0,
+        70.0,
+        90.0787,
+        110.6606,
+        132.3968,
+        155.7909,
+        181.1544,
+        208.6494,
+        238.3258,
+        270.1530,
+        304.0465,
+        339.8891,
+        377.5467,
+        416.8789,
+        457.7442,
+        500.0,
+        543.4970,
+        588.0685,
+        633.5144,
+        679.5799,
+        725.9285,
+        772.1102,
+        817.5241,
+        861.3757,
+        902.6287,
+        939.9520,
+        971.6610,
+        995.6532,
+        1009.3396,
     ]
     df = (
         ds.to_dataframe()
         .reset_index()
         .assign(lev=lambda x: x.lev.astype(int))
         .merge(
-            pd.DataFrame(level_pressure, columns=["hPa"]).reset_index(
-                names="lev"
-            ),
+            pd.DataFrame(level_pressure, columns=["hPa"]).reset_index(names="lev"),
             on="lev",
         )
         .assign(height=lambda x: openap.aero.h_isa(x.hPa * 100).round(-2))
-        .assign(longitude=lambda x: ((x.lon + 180) % 360 - 180))
+        .assign(longitude=lambda x: (x.lon + 180) % 360 - 180)
         .query("height<15000")
     )
     df_cost = (
@@ -276,25 +319,29 @@ def _run_grid_cost_cases(contrail_nc, top):
             except (KeyError, AttributeError):
                 obj = None
 
-            results.append({
-                "label": label,
-                "success": success,
-                "iterations": iterations,
-                "elapsed": round(elapsed, 3),
-                "objective": obj,
-                "fuel": round(float(df.mass.iloc[0] - df.mass.iloc[-1]), 2),
-                "time": round(float(df.ts.iloc[-1]), 1),
-                "alt_max": round(float(df.altitude.max()), 0),
-                "grid_cost_sum": float(df.grid_cost.sum()),
-                "fuel_cost_sum": round(float(df.fuel_cost.sum()), 1),
-            })
+            results.append(
+                {
+                    "label": label,
+                    "success": success,
+                    "iterations": iterations,
+                    "elapsed": round(elapsed, 3),
+                    "objective": obj,
+                    "fuel": round(float(df.mass.iloc[0] - df.mass.iloc[-1]), 2),
+                    "time": round(float(df.ts.iloc[-1]), 1),
+                    "alt_max": round(float(df.altitude.max()), 0),
+                    "grid_cost_sum": float(df.grid_cost.sum()),
+                    "fuel_cost_sum": round(float(df.fuel_cost.sum()), 1),
+                }
+            )
         except Exception as e:
-            results.append({
-                "label": label,
-                "success": False,
-                "error": str(e)[:200],
-                "elapsed": round(time.time() - t0, 3),
-            })
+            results.append(
+                {
+                    "label": label,
+                    "success": False,
+                    "error": str(e)[:200],
+                    "elapsed": round(time.time() - t0, 3),
+                }
+            )
 
     return results
 
@@ -437,12 +484,21 @@ def run_with_uv(version):
     # v2.0.0+ ships as the top-level `opentop` package.
     pypi_name = "opentop" if int(pypi_version.split(".")[0]) >= 2 else "openap-top"
     cmd = [
-        "uv", "run", "--no-project",
-        "--with", f"{pypi_name}=={pypi_version}",
-        "python", str(Path(__file__).resolve()), "--run-only",
+        "uv",
+        "run",
+        "--no-project",
+        "--with",
+        f"{pypi_name}=={pypi_version}",
+        "python",
+        str(Path(__file__).resolve()),
+        "--run-only",
     ]
     result = subprocess.run(
-        cmd, capture_output=True, text=True, cwd=REPO_ROOT, timeout=3600,
+        cmd,
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        timeout=3600,
     )
     if result.stderr:
         sys.stderr.write(result.stderr)
@@ -460,15 +516,18 @@ def run_with_uv(version):
 def main():
     parser = argparse.ArgumentParser(description="Benchmark openap-top")
     parser.add_argument(
-        "--version", default="HEAD",
+        "--version",
+        default="HEAD",
         help="PyPI version to benchmark (e.g. 2.0.0), or HEAD for local dev",
     )
     parser.add_argument(
-        "--output", default=None,
+        "--output",
+        default=None,
         help="Output file path. Default: tests/benchmarks/<version>.txt",
     )
     parser.add_argument(
-        "--run-only", action="store_true",
+        "--run-only",
+        action="store_true",
         help="Run benchmarks and print JSON (internal use by version runner)",
     )
     args = parser.parse_args()

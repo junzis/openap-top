@@ -103,7 +103,11 @@ class Cruise(Base):
 
         # Initial guess - states
         initial_guess = kwargs.get("initial_guess", None)
-        self.x_guess = self.initial_guess(initial_guess) if initial_guess is not None else self.initial_guess()
+        self.x_guess = (
+            self.initial_guess(initial_guess)
+            if initial_guess is not None
+            else self.initial_guess()
+        )
 
         # Initial guess - controls
         self.u_guess = [0.7, 0, psi]
@@ -152,9 +156,7 @@ class Cruise(Base):
 
         customized_max_fuel = max_fuel
 
-        X, U = self._build_opti(
-            objective, ts_final_guess=self.range / 200, **_kwargs
-        )
+        X, U = self._build_opti(objective, ts_final_guess=self.range / 200, **_kwargs)
         opti = self._opti
 
         # --- Phase-specific constraints ---

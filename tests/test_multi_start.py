@@ -10,8 +10,9 @@ import opentop as top
 from opentop._multi_start import _perturb_guess
 
 
-def _make_canonical_df(n=10, origin=(52.362, 13.501), dest=(40.472, -3.563),
-                       cruise_alt_ft=35000):
+def _make_canonical_df(
+    n=10, origin=(52.362, 13.501), dest=(40.472, -3.563), cruise_alt_ft=35000
+):
     """Build a synthetic canonical trajectory DataFrame (great-circle,
     constant cruise altitude) for testing _perturb_guess in isolation."""
     lats = np.linspace(origin[0], dest[0], n)
@@ -19,13 +20,15 @@ def _make_canonical_df(n=10, origin=(52.362, 13.501), dest=(40.472, -3.563),
     alts = np.full(n, cruise_alt_ft, dtype=float)
     mass = np.linspace(67000, 62000, n)
     ts = np.linspace(0, 8000, n)
-    return pd.DataFrame({
-        "latitude": lats,
-        "longitude": lons,
-        "altitude": alts,
-        "mass": mass,
-        "ts": ts,
-    })
+    return pd.DataFrame(
+        {
+            "latitude": lats,
+            "longitude": lons,
+            "altitude": alts,
+            "mass": mass,
+            "ts": ts,
+        }
+    )
 
 
 @pytest.fixture(scope="module")
@@ -46,7 +49,8 @@ class TestPerturbGuessAltitude:
         df = _make_canonical_df()
         perturbed = _perturb_guess(df, lateral_km=0.0, altitude_ft=1500.0, proj=proj)
         np.testing.assert_allclose(
-            perturbed["altitude"].values, df["altitude"].values + 1500.0  # type: ignore[operator]  # pandas .values type is opaque to numpy stubs
+            perturbed["altitude"].values,
+            df["altitude"].values + 1500.0,  # type: ignore[operator]  # pandas .values type is opaque to numpy stubs
         )
 
     def test_altitude_zero_leaves_altitude_unchanged(self, proj):
@@ -60,7 +64,8 @@ class TestPerturbGuessAltitude:
         df = _make_canonical_df()
         perturbed = _perturb_guess(df, lateral_km=0.0, altitude_ft=-2000.0, proj=proj)
         np.testing.assert_allclose(
-            perturbed["altitude"].values, df["altitude"].values - 2000.0  # type: ignore[operator]  # pandas .values type is opaque to numpy stubs
+            perturbed["altitude"].values,
+            df["altitude"].values - 2000.0,  # type: ignore[operator]  # pandas .values type is opaque to numpy stubs
         )
 
     def test_perturb_does_not_mutate_input(self, proj):
@@ -80,19 +85,29 @@ class TestPerturbGuessLateral:
     def test_endpoints_unchanged_for_any_lateral(self, proj):
         df = _make_canonical_df()
         for lat_km in (-150.0, -50.0, 0.0, 50.0, 150.0):
-            perturbed = _perturb_guess(df, lateral_km=lat_km, altitude_ft=0.0, proj=proj)
+            perturbed = _perturb_guess(
+                df, lateral_km=lat_km, altitude_ft=0.0, proj=proj
+            )
             assert abs(perturbed["latitude"].iloc[0] - df["latitude"].iloc[0]) < 1e-6
             assert abs(perturbed["longitude"].iloc[0] - df["longitude"].iloc[0]) < 1e-6
             assert abs(perturbed["latitude"].iloc[-1] - df["latitude"].iloc[-1]) < 1e-6
-            assert abs(perturbed["longitude"].iloc[-1] - df["longitude"].iloc[-1]) < 1e-6
+            assert (
+                abs(perturbed["longitude"].iloc[-1] - df["longitude"].iloc[-1]) < 1e-6
+            )
 
     def test_lateral_zero_leaves_path_unchanged(self, proj):
         df = _make_canonical_df()
         perturbed = _perturb_guess(df, lateral_km=0.0, altitude_ft=0.0, proj=proj)
-        np.testing.assert_allclose(perturbed["latitude"].values, df["latitude"].values,  # type: ignore[arg-type]  # pandas .values type is opaque to numpy stubs
-                                   atol=1e-9)
-        np.testing.assert_allclose(perturbed["longitude"].values, df["longitude"].values,  # type: ignore[arg-type]  # pandas .values type is opaque to numpy stubs
-                                   atol=1e-9)
+        np.testing.assert_allclose(
+            perturbed["latitude"].values,
+            df["latitude"].values,  # type: ignore[arg-type]  # pandas .values type is opaque to numpy stubs
+            atol=1e-9,
+        )
+        np.testing.assert_allclose(
+            perturbed["longitude"].values,
+            df["longitude"].values,  # type: ignore[arg-type]  # pandas .values type is opaque to numpy stubs
+            atol=1e-9,
+        )
 
     def test_lateral_sign_flips_direction(self, proj):
         df = _make_canonical_df()
@@ -106,7 +121,7 @@ class TestPerturbGuessLateral:
 
     def test_lateral_peak_near_midpoint(self, proj):
         """The deflection should be largest at the midpoint (sin(pi/2) = 1)."""
-        df = _make_canonical_df(n=21)       # odd n → exact midpoint
+        df = _make_canonical_df(n=21)  # odd n → exact midpoint
         perturbed = _perturb_guess(df, lateral_km=100.0, altitude_ft=0.0, proj=proj)
         xp, yp = proj(df["longitude"].values, df["latitude"].values)
         xp_p, yp_p = proj(perturbed["longitude"].values, perturbed["latitude"].values)
@@ -132,7 +147,7 @@ def _fast_optimizer():
     opt = top.Cruise(
         "A320",
         (52.362, 13.501),
-        (52.560, 13.287),   # short intra-Berlin hop; solver converges fast
+        (52.560, 13.287),  # short intra-Berlin hop; solver converges fast
         m0=0.85,
     )
     opt.setup(max_iter=500)
@@ -177,9 +192,18 @@ class TestMultiStartSingle:
             objective="fuel", n_starts=1
         )
         c = candidates[0]
-        for field in ("start_index", "objective", "fuel", "grid_cost",
-                      "success", "return_status", "iters", "perturbation",
-                      "wall_time_s", "trajectory"):
+        for field in (
+            "start_index",
+            "objective",
+            "fuel",
+            "grid_cost",
+            "success",
+            "return_status",
+            "iters",
+            "perturbation",
+            "wall_time_s",
+            "trajectory",
+        ):
             assert field in c, f"missing field: {field}"
         assert c["start_index"] == 0
         assert c["perturbation"] == {"lateral_km": 0.0, "altitude_ft": 0.0}
@@ -205,7 +229,9 @@ class TestMultiStartSingle:
         _fast_optimizer.trajectory = spy
         try:
             _fast_optimizer.multi_start_trajectory(
-                objective="fuel", n_starts=1, initial_guess=baseline,
+                objective="fuel",
+                n_starts=1,
+                initial_guess=baseline,
             )
         finally:
             _fast_optimizer.trajectory = original_trajectory
@@ -290,15 +316,32 @@ class TestMultiStartLoop:
     def test_ranking_feasibility_first_then_objective(self):
         """Synthetic records to test the sort order independently of the solver."""
         from opentop._multi_start import _rank_candidates
+
         records = [
-            {"start_index": 0, "success": False, "objective": 100.0,
-             "trajectory": "df_a"},
-            {"start_index": 1, "success": True,  "objective": 200.0,
-             "trajectory": "df_b"},
-            {"start_index": 2, "success": False, "objective": 50.0,
-             "trajectory": "df_c"},
-            {"start_index": 3, "success": True,  "objective": 150.0,
-             "trajectory": "df_d"},
+            {
+                "start_index": 0,
+                "success": False,
+                "objective": 100.0,
+                "trajectory": "df_a",
+            },
+            {
+                "start_index": 1,
+                "success": True,
+                "objective": 200.0,
+                "trajectory": "df_b",
+            },
+            {
+                "start_index": 2,
+                "success": False,
+                "objective": 50.0,
+                "trajectory": "df_c",
+            },
+            {
+                "start_index": 3,
+                "success": True,
+                "objective": 150.0,
+                "trajectory": "df_d",
+            },
         ]
         ranked = _rank_candidates(records)
         indices = [c["start_index"] for c in ranked]
@@ -326,12 +369,14 @@ class TestMultiStartWithInterpolant:
         lats = np.linspace(50, 56, 5)
         heights = np.linspace(5000, 12000, 4)
         lon_g, lat_g, h_g = np.meshgrid(lons, lats, heights, indexing="ij")
-        df_cost = pd.DataFrame({
-            "longitude": lon_g.ravel(),
-            "latitude": lat_g.ravel(),
-            "height": h_g.ravel(),
-            "cost": np.zeros(lon_g.size),
-        })
+        df_cost = pd.DataFrame(
+            {
+                "longitude": lon_g.ravel(),
+                "latitude": lat_g.ravel(),
+                "height": h_g.ravel(),
+                "cost": np.zeros(lon_g.size),
+            }
+        )
         interp = top.tools.interpolant_from_dataframe(df_cost, shape="bspline")
 
         trajectory, candidates = opt.multi_start_trajectory(
@@ -343,7 +388,7 @@ class TestMultiStartWithInterpolant:
         assert "grid_cost" in trajectory.columns
         for c in candidates:
             assert isinstance(c["grid_cost"], float)
-            assert not math.isnan(c["grid_cost"])   # populated, not NaN
+            assert not math.isnan(c["grid_cost"])  # populated, not NaN
 
     def test_grid_cost_nan_when_no_interpolant(self, _fast_optimizer):
         """Without an interpolant, grid_cost in each candidate is NaN
