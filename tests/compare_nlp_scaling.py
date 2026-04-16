@@ -6,18 +6,11 @@ Contrail+CO2 objective from openap.dev/optimize/contrails.html.
 
 import sys
 import time
-import urllib
 from pathlib import Path
-
-import xarray as xr
-from scipy.ndimage import gaussian_filter
-
-import pandas as pd
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-import openap  # noqa: E402  (sys.path must be set before importing project packages)
 import openap.casadi as oc  # noqa: E402
 
 import opentop as top  # noqa: E402
@@ -34,89 +27,7 @@ ROUTES = [
 
 SCALING_METHODS = ["gradient-based", "none"]
 
-DATA_DIR = Path(__file__).parent / "tmp"
-
-
-def prepare_contrail_data():
-    """Download and prepare contrail cost data (from openap.dev example)."""
-    DATA_DIR.mkdir(exist_ok=True)
-    nc_path = DATA_DIR / "contrail.nc"
-
-    if not nc_path.exists():
-        print("Downloading contrail data...")
-        urllib.request.urlretrieve(
-            "https://opendap.4tu.nl/thredds/fileServer/data2/djht/"
-            "bea8a3fe-e34c-4598-9f94-c5a5c63348e5/1/contrail_original.nc",
-            str(nc_path),
-        )
-
-    ds = xr.open_dataset(str(nc_path)).sel(time="2015-12-18")
-
-    level_pressure = [
-        0.0,
-        10.0,
-        30.0,
-        50.0,
-        70.0,
-        90.0787,
-        110.6606,
-        132.3968,
-        155.7909,
-        181.1544,
-        208.6494,
-        238.3258,
-        270.1530,
-        304.0465,
-        339.8891,
-        377.5467,
-        416.8789,
-        457.7442,
-        500.0,
-        543.4970,
-        588.0685,
-        633.5144,
-        679.5799,
-        725.9285,
-        772.1102,
-        817.5241,
-        861.3757,
-        902.6287,
-        939.9520,
-        971.6610,
-        995.6532,
-        1009.3396,
-    ]
-
-    df = (
-        ds.to_dataframe()
-        .reset_index()
-        .assign(lev=lambda x: x.lev.astype(int))
-        .merge(
-            pd.DataFrame(level_pressure, columns=["hPa"]).reset_index(names="lev"),
-            on="lev",
-        )
-        .assign(height=lambda x: openap.aero.h_isa(x.hPa * 100).round(-2))
-        .assign(longitude=lambda x: (x.lon + 180) % 360 - 180)
-        .query("height<15000")
-    )
-
-    df_cost = (
-        df.rename(columns={"lat": "latitude", "atr20_contrail": "cost"})[
-            ["time", "latitude", "longitude", "hPa", "height", "cost"]
-        ]
-        .query("-20<longitude<40 and 30<latitude<70 and time.dt.hour==12")
-        .sort_values(["height", "latitude", "longitude"])
-    )
-
-    cost = df_cost.cost.values.reshape(
-        df_cost.height.nunique(),
-        df_cost.latitude.nunique(),
-        df_cost.longitude.nunique(),
-    )
-    cost_ = gaussian_filter(cost, sigma=1, mode="nearest")
-    df_cost = df_cost.assign(cost=cost_.flatten())
-
-    return df_cost
+CASADI_CACHE = Path(__file__).parent / "fixtures" / "synthetic_4d.casadi"
 
 
 def make_contrail_objective(optimizer):
@@ -124,14 +35,19 @@ def make_contrail_objective(optimizer):
 
     def objective(x, u, dt, **kwargs):
         vtas = oc.aero.mach2tas(u[0], x[2])
-        kwargs.pop("n_dim", None)
-        kwargs.pop("time_dependent", None)
         contrail_cost = (
-            optimizer.obj_grid_cost(x, u, dt, n_dim=3, time_dependent=False, **kwargs)
+            optimizer.obj_grid_cost(
+                x,
+                u,
+                dt,
+                interpolant=kwargs["interpolant"],
+                n_dim=4,
+                time_dependent=True,
+            )
             * vtas
             * 1e-3
         )
-        co2_cost = optimizer.obj_fuel(x, u, dt, **kwargs) * 7.03e-15
+        co2_cost = optimizer.obj_fuel(x, u, dt) * 7.03e-15
         return contrail_cost + co2_cost
 
     return objective
@@ -143,7 +59,7 @@ def run_opt(
     dest,
     scaling_method,
     objective="fuel",
-    df_cost=None,
+    interpolant=None,
     fuel_optimal=None,
 ):
     """Run a single optimization and return results."""
@@ -153,17 +69,17 @@ def run_opt(
         "debug": True,
         "ipopt_kwargs": {"nlp_scaling_method": scaling_method},
     }
-    if df_cost is not None:
+    if interpolant is not None:
         setup_kwargs["max_iter"] = 2000
     optimizer.setup(**setup_kwargs)
 
     traj_kwargs = {}
-    if df_cost is not None:
-        interpolant = top.tools.interpolant_from_dataframe(df_cost)
+    if interpolant is not None:
         traj_kwargs.update(
             objective=make_contrail_objective(optimizer),
             interpolant=interpolant,
-            n_dim=3,
+            n_dim=4,
+            time_dependent=True,
             return_failed=True,
         )
         if fuel_optimal is not None:
@@ -227,9 +143,9 @@ if __name__ == "__main__":
     print(f"Aircraft: {AIRCRAFT}, M0: {M0}")
     print(f"Routes: {ROUTES}")
 
-    print("\nPreparing contrail cost data...")
-    df_cost = prepare_contrail_data()
-    print(f"  Cost data shape: {df_cost.shape}")
+    print(f"\nLoading cached interpolant from {CASADI_CACHE}...")
+    interpolant = top.tools.load_interpolant(str(CASADI_CACHE))
+    print("  Interpolant loaded.")
 
     for origin, dest in ROUTES:
         route_label = f"{origin}-{dest}"
@@ -257,7 +173,7 @@ if __name__ == "__main__":
                 origin,
                 dest,
                 method,
-                df_cost=df_cost,
+                interpolant=interpolant,
                 fuel_optimal=fuel_optimal,
             )
         print_comparison(f"Cruise Contrail+CO2 - {route_label}", cruise_cc_results)
@@ -282,7 +198,7 @@ if __name__ == "__main__":
                 origin,
                 dest,
                 method,
-                df_cost=df_cost,
+                interpolant=interpolant,
                 fuel_optimal=full_fuel_optimal,
             )
         print_comparison(

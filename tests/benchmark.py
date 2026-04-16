@@ -10,8 +10,8 @@ Usage:
     python tests/benchmark.py --version 2.0.0    # Benchmark PyPI version
     python tests/benchmark.py --output report.txt
 
-Grid cost tests require tests/tmp/contrail.nc. If absent, the grid cost
-section is skipped.
+Grid cost tests use tests/fixtures/synthetic_4d.casadi. If absent, the
+grid cost section is skipped.
 """
 
 import argparse
@@ -191,104 +191,41 @@ def run_benchmarks():
         print(f"  {label}...", file=sys.stderr, flush=True)
         results["standard"].append(_run_standard_case(label, factory, objective))
 
-    contrail_nc = REPO_ROOT / "tests" / "tmp" / "contrail.nc"
-    if contrail_nc.exists():
+    casadi_cache = REPO_ROOT / "tests" / "fixtures" / "synthetic_4d.casadi"
+    if casadi_cache.exists():
         print("  grid cost cases...", file=sys.stderr, flush=True)
         try:
-            results["grid_cost"] = _run_grid_cost_cases(contrail_nc, top)
+            results["grid_cost"] = _run_grid_cost_cases(casadi_cache, top)
         except Exception as e:
             results["grid_cost_error"] = str(e)[:500]
     else:
-        results["grid_cost_skipped"] = f"{contrail_nc.name} not found"
+        results["grid_cost_skipped"] = f"{casadi_cache.name} not found"
 
     return results
 
 
-def _run_grid_cost_cases(contrail_nc, top):
+def _run_grid_cost_cases(casadi_path, top):
     """Run contrail+CO2 grid cost benchmarks."""
-    import openap
     import openap.casadi as oc
-    import xarray as xr
-    from scipy.ndimage import gaussian_filter
 
-    import pandas as pd
-
-    ds = xr.open_dataset(str(contrail_nc)).sel(time="2015-12-18")
-    level_pressure = [
-        0.0,
-        10.0,
-        30.0,
-        50.0,
-        70.0,
-        90.0787,
-        110.6606,
-        132.3968,
-        155.7909,
-        181.1544,
-        208.6494,
-        238.3258,
-        270.1530,
-        304.0465,
-        339.8891,
-        377.5467,
-        416.8789,
-        457.7442,
-        500.0,
-        543.4970,
-        588.0685,
-        633.5144,
-        679.5799,
-        725.9285,
-        772.1102,
-        817.5241,
-        861.3757,
-        902.6287,
-        939.9520,
-        971.6610,
-        995.6532,
-        1009.3396,
-    ]
-    df = (
-        ds.to_dataframe()
-        .reset_index()
-        .assign(lev=lambda x: x.lev.astype(int))
-        .merge(
-            pd.DataFrame(level_pressure, columns=["hPa"]).reset_index(names="lev"),
-            on="lev",
-        )
-        .assign(height=lambda x: openap.aero.h_isa(x.hPa * 100).round(-2))
-        .assign(longitude=lambda x: (x.lon + 180) % 360 - 180)
-        .query("height<15000")
-    )
-    df_cost = (
-        df.rename(columns={"lat": "latitude", "atr20_contrail": "cost"})[
-            ["time", "latitude", "longitude", "hPa", "height", "cost"]
-        ]
-        .query("-20<longitude<40 and 30<latitude<70 and time.dt.hour==12")
-        .sort_values(["height", "latitude", "longitude"])
-    )
-    cost = df_cost.cost.values.reshape(
-        df_cost.height.nunique(),
-        df_cost.latitude.nunique(),
-        df_cost.longitude.nunique(),
-    )
-    cost_ = gaussian_filter(cost, sigma=1, mode="nearest")
-    df_cost = df_cost.assign(cost=cost_.flatten())
-    interpolant = top.tools.interpolant_from_dataframe(df_cost)
+    interpolant = top.tools.load_interpolant(str(casadi_path))
 
     def make_obj(optimizer):
         def objective(x, u, dt, **kwargs):
             vtas = oc.aero.mach2tas(u[0], x[2])
-            kwargs.pop("n_dim", None)
-            kwargs.pop("time_dependent", None)
             contrail_cost = (
                 optimizer.obj_grid_cost(
-                    x, u, dt, n_dim=3, time_dependent=False, **kwargs
+                    x,
+                    u,
+                    dt,
+                    interpolant=kwargs["interpolant"],
+                    n_dim=4,
+                    time_dependent=True,
                 )
                 * vtas
                 * 1e-3
             )
-            co2_cost = optimizer.obj_fuel(x, u, dt, **kwargs) * 7.03e-15
+            co2_cost = optimizer.obj_fuel(x, u, dt) * 7.03e-15
             return contrail_cost + co2_cost
 
         return objective
@@ -309,7 +246,8 @@ def _run_grid_cost_cases(contrail_nc, top):
             df = opt.trajectory(
                 objective=make_obj(opt),
                 interpolant=interpolant,
-                n_dim=3,
+                n_dim=4,
+                time_dependent=True,
                 initial_guess=df_fuel,
                 return_failed=True,
             )

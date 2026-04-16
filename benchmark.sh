@@ -8,7 +8,7 @@
 #   ./benchmark.sh 1.11.0 2.0.0       Benchmark multiple versions sequentially
 #
 # Reports are written to tests/benchmarks/<version>.txt.
-# Grid cost tests need tests/tmp/contrail.nc (downloaded by tests/compare_nlp_scaling.py).
+# Grid cost tests use tests/fixtures/synthetic_4d.casadi (committed fixture).
 
 set -e
 
