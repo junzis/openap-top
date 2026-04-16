@@ -135,3 +135,74 @@ def infer_aircraft(flight_df: pd.DataFrame) -> str | None:
     if pd.isna(typecode):
         return None
     return str(typecode).strip() or None
+
+
+def build_meteo_and_wind(
+    flight_df: pd.DataFrame,
+    era5_store: Union[str, Path],
+    time_buffer_hours: float = 3.0,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Fetch ERA5 meteo for the bbox/time-window around the flight.
+
+    Returns (meteo_df, wind_df):
+      meteo_df: ERA5 fields on a bbox x altitudes x times grid.
+      wind_df:  columns (ts, latitude, longitude, h, u, v) ready for
+                `Base.enable_wind(wind_df)`.
+    """
+    try:
+        from fastmeteo.source import ArcoEra5
+    except ImportError as exc:
+        raise ImportError(
+            "opentop replay requires the `fastmeteo` package. "
+            'Install with: pip install "opentop[replay]"'
+        ) from exc
+
+    import math
+
+    from openap.aero import ft
+
+    import numpy as np
+
+    era5 = ArcoEra5(local_store=str(era5_store))
+
+    start = pd.Timestamp(flight_df["timestamp"].min())  # type: ignore[arg-type]
+    stop = pd.Timestamp(flight_df["timestamp"].max())  # type: ignore[arg-type]
+    stop_padded = stop + pd.Timedelta(hours=time_buffer_hours)
+    timestamps = pd.date_range(start, stop_padded, freq="1h")
+
+    lat_min = math.ceil(float(flight_df["latitude"].min())) - 2  # type: ignore[arg-type]
+    lat_max = math.ceil(float(flight_df["latitude"].max())) + 2  # type: ignore[arg-type]
+    lon_min = math.ceil(float(flight_df["longitude"].min())) - 4  # type: ignore[arg-type]
+    lon_max = math.ceil(float(flight_df["longitude"].max())) + 4  # type: ignore[arg-type]
+    latitudes = np.arange(lat_min, lat_max, 1)
+    longitudes = np.arange(lon_min, lon_max, 1)
+    altitudes = np.arange(1000, 46000, 1500)  # feet
+
+    lat_g, lon_g, alt_g, time_g = np.meshgrid(
+        latitudes, longitudes, altitudes, timestamps
+    )
+    grid = pd.DataFrame(
+        {
+            "latitude": lat_g.flatten(),
+            "longitude": lon_g.flatten(),
+            "altitude": alt_g.flatten(),
+            "timestamp": time_g.flatten(),
+        }
+    )
+    meteo = era5.interpolate(grid)
+
+    wind = (
+        meteo.rename(
+            columns={
+                "u_component_of_wind": "u",
+                "v_component_of_wind": "v",
+            }
+        )
+        .assign(
+            ts=lambda x: (x["timestamp"] - x["timestamp"].iloc[0]).dt.total_seconds(),
+            h=lambda x: x["altitude"] * ft,
+        )[["ts", "latitude", "longitude", "h", "u", "v"]]
+        .reset_index(drop=True)
+    )
+
+    return meteo, wind
