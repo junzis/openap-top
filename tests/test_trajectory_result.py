@@ -54,6 +54,18 @@ def test_unknown_kwarg_raises_type_error_on_complete_flight():
         opt.trajectory(objective="fuel", another_bogus_kwarg=1)  # type: ignore[call-arg]  # intentionally passing invalid kwarg to test TypeError
 
 
+def test_stats_before_solve_raises_runtime_error():
+    opt = top.Cruise("A320", (52.308, 4.764), (50.033, 8.570), m0=0.85)
+    with pytest.raises(RuntimeError, match="call trajectory"):
+        _ = opt.stats
+
+
+def test_success_before_solve_raises_runtime_error():
+    opt = top.Cruise("A320", (52.308, 4.764), (50.033, 8.570), m0=0.85)
+    with pytest.raises(RuntimeError, match="call trajectory"):
+        _ = opt.success
+
+
 def test_result_object_df_matches_default_return():
     """The DataFrame returned with result_object=False must equal r.df."""
     opt1 = _fast_cruise()
@@ -64,6 +76,7 @@ def test_result_object_df_matches_default_return():
 
     # Same route + settings + deterministic solver → same objective.
     # (Column-wise equality is risky due to ~1e-15 solver noise across runs.)
+    assert opt1.objective_value is not None
     assert abs(float(opt1.objective_value) - r.objective) < 1e-6
     # Row count should match exactly.
     assert len(df_direct) == len(r.df)  # type: ignore[arg-type]  # trajectory() without result_object always returns DataFrame

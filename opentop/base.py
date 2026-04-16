@@ -124,6 +124,7 @@ class Base:
 
         self.debug = False
         self._last_solution = None
+        self.objective_value: float | None = None
         self.setup()
 
     @property
@@ -140,11 +141,19 @@ class Base:
     @property
     def stats(self) -> dict:
         """Solver stats dict from the most recent solve."""
+        if self._last_solution is None:
+            raise RuntimeError(
+                "No solver stats available — call trajectory() or multi_start_trajectory() first."
+            )
         return self._last_solution.stats()
 
     @property
     def success(self) -> bool:
         """Whether the most recent solve succeeded."""
+        if self._last_solution is None:
+            raise RuntimeError(
+                "No solver result available — call trajectory() or multi_start_trajectory() first."
+            )
         return bool(self._last_solution.stats()["success"])
 
     def proj(self, lon: Any, lat: Any, inverse: bool = False, symbolic: bool = False) -> Any:
@@ -681,7 +690,8 @@ class Base:
         """
         from ._options import build_result
         stats = dict(self._last_solution.stats()) if getattr(self, "_last_solution", None) else {}
-        return build_result(df, stats, float(getattr(self, "objective_value", float("nan"))))
+        obj = float(self.objective_value) if self.objective_value is not None else float("nan")
+        return build_result(df, stats, obj)
 
     def multi_start_trajectory(
         self,

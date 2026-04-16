@@ -355,3 +355,14 @@ class TestMultiStartWithInterpolant:
         for c in candidates:
             assert isinstance(c["grid_cost"], float)
             assert math.isnan(c["grid_cost"])
+
+
+class TestMultiStartResultObject:
+    def test_multi_start_with_result_object_kwarg_does_not_crash(self, _fast_optimizer):
+        """result_object=True must be silently dropped; multi-start always returns DataFrames."""
+        trajectory, candidates = _fast_optimizer.multi_start_trajectory(
+            objective="fuel", n_starts=1, result_object=True
+        )
+        assert isinstance(trajectory, pd.DataFrame)
+        for c in candidates:
+            assert isinstance(c["trajectory"], pd.DataFrame)

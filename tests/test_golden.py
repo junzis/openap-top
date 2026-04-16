@@ -24,6 +24,7 @@ def test_complete_flight_golden_objective_within_1pct():
 
     assert df is not None
 
+    assert opt.objective_value is not None
     obj_now = float(opt.objective_value)
     baseline = record["objective"]
     drift = abs(obj_now - baseline) / baseline

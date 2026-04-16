@@ -32,6 +32,7 @@ def test_climate_objective_finite_and_positive(metric):
     assert df is not None, f"{metric}: trajectory returned None"
     assert opt.success, \
         f"{metric}: solver failed: {opt.stats}"
+    assert opt.objective_value is not None, f"{metric}: objective_value is None"
     assert math.isfinite(opt.objective_value), \
         f"{metric}: objective is not finite: {opt.objective_value}"
     assert opt.objective_value != 0, \

@@ -141,6 +141,8 @@ def run_multi_start(
     altitude_jitter_ft = kwargs.pop("altitude_jitter_ft", 3000.0)
     seed = kwargs.pop("seed", None)
     trajectory_kwargs = dict(kwargs)
+    # multi_start always returns DataFrames; strip the result_object flag if passed.
+    trajectory_kwargs.pop("result_object", None)
     trajectory_kwargs["objective"] = objective
 
     if n_starts < 1:

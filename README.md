@@ -250,10 +250,20 @@ Use `opentop --help`, `opentop optimize --help`, and `opentop gengrid --help` fo
 After calling `.trajectory()`, the optimizer exposes:
 
 ```python
-optimizer.solver          # CasADi OptiSol object
-optimizer.solver.stats()  # solver statistics dict ("success", "iter_count", ...)
+optimizer.stats           # solver statistics dict ("success", "iter_count", ...)
+optimizer.success         # True if the most recent solve succeeded
 optimizer.objective_value # final objective value (float)
 ```
+
+For full structured access including status, iteration count, fuel, and grid cost in one dataclass:
+
+```python
+result = optimizer.trajectory(objective="fuel", result_object=True)
+# result.df, result.success, result.status, result.objective,
+# result.iters, result.fuel, result.grid_cost, result.stats
+```
+
+`optimizer.solver` still works in v2.2 with a `DeprecationWarning`; it will be removed in v2.3.
 
 ## Benchmarks
 
