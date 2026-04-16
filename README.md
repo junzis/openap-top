@@ -314,6 +314,8 @@ Version 2.2 makes several structural changes that may require small updates to e
 | `optimizer.solver.stats()` | `optimizer.stats` (dict) or `optimizer.success` (bool) |
 | `opentop.vis.map(df, ...)` | `opentop.vis.plot_map(df, ...)` |
 | — | New: `trajectory(..., result_object=True)` returns a `TrajectoryResult` dataclass |
+| — | New: `opentop replay CALLSIGN` CLI — fetches real flight from OpenSky, runs comparison optimization (see `### opentop replay` above) |
+| — | New: `opentop.vis.trajectory(df | [df1, df2])` accepts a list for overlay plotting |
 
 Internally, `opentop/` has been split into focused modules: `_dynamics.py`, `_objectives.py`, `_trajectory.py`, `_options.py`, `_multi_start.py`. If you were importing internal helpers, they have moved — use the public API on `Base` / `Cruise` / `CompleteFlight` where possible.
 
