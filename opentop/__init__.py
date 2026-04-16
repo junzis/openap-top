@@ -7,4 +7,6 @@ from .cruise import Cruise
 from .descent import Descent
 from .full import CompleteFlight
 
+__all__ = ["Base", "Climb", "CompleteFlight", "Cruise", "Descent", "tools", "vis"]
+
 __version__ = version("opentop")

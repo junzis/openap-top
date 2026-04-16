@@ -2,11 +2,11 @@
 
 import math
 
-import numpy as np
-import pandas as pd
 import pytest
 
+import numpy as np
 import opentop as top
+import pandas as pd
 from opentop._multi_start import _perturb_guess
 
 
@@ -404,7 +404,8 @@ class TestMultiStartWithInterpolant:
 
 class TestMultiStartResultObject:
     def test_multi_start_with_result_object_kwarg_does_not_crash(self, _fast_optimizer):
-        """result_object=True must be silently dropped; multi-start always returns DataFrames."""
+        """result_object=True must be silently dropped; multi-start always returns
+        DataFrames."""
         trajectory, candidates = _fast_optimizer.multi_start_trajectory(
             objective="fuel", n_starts=1, result_object=True
         )

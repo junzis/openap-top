@@ -17,9 +17,9 @@ from pathlib import Path
 from typing import Any, Callable, Union, cast
 
 import click
-import pandas as pd
 
 import opentop as top
+import pandas as pd
 from opentop import tools
 
 # ============================================================
@@ -93,7 +93,7 @@ def build_objective_callable(
     Otherwise we return a callable that sums the weighted terms.
     """
     if len(terms) == 1 and terms[0][0] == 1.0 and terms[0][1] != "grid":
-        weight, name, param = terms[0]
+        _, name, param = terms[0]
         return name if param is None else f"{name}:{param}"
 
     # Composite or grid-containing objective — return a callable.
@@ -243,7 +243,7 @@ def _pad_altitudes(df: pd.DataFrame) -> pd.DataFrame:
                 p[col] = 0
         pads.append(p[df.columns])
 
-    return pd.concat([df] + pads, ignore_index=True)
+    return pd.concat([df, *pads], ignore_index=True)
 
 
 # ============================================================

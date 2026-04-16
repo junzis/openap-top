@@ -9,18 +9,18 @@ import time
 import urllib
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
 import xarray as xr
 from scipy.ndimage import gaussian_filter
+
+import pandas as pd
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-import openap
-import openap.casadi as oc
+import openap  # noqa: E402  (sys.path must be set before importing project packages)
+import openap.casadi as oc  # noqa: E402
 
-import opentop as top
+import opentop as top  # noqa: E402
 
 # --- Configuration ---
 AIRCRAFT = "A320"
@@ -205,7 +205,7 @@ def print_comparison(label, results):
             print(f"    Mach range: {df.mach.min():.3f} - {df.mach.max():.3f}")
             print(f"    Total fuel cost:  {df.fuel_cost.sum():.4f}")
         else:
-            print(f"    Result: FAILED (None)")
+            print("    Result: FAILED (None)")
 
     # Print diff if both succeeded
     methods = list(results.keys())

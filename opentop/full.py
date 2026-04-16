@@ -10,16 +10,10 @@ import casadi as ca
 import openap.casadi as oc
 from openap.aero import fpm, ft, kts
 
-import numpy as np
 import pandas as pd
 
-from .base import Base
 from ._types import LatLon
-
-try:
-    from . import tools
-except ImportError:
-    warnings.warn("cfgrib and sklearn are required for wind integration")
+from .base import Base
 
 if TYPE_CHECKING:
     from ._options import TrajectoryResult

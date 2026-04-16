@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 import casadi as ca
+
 import pandas as pd
 
 
@@ -39,7 +40,9 @@ class GridOptions:
 
 @dataclass(frozen=True, slots=True)
 class TrajectoryResult:
-    """Rich result of a trajectory optimization. Returned when trajectory(result_object=True)."""
+    """Rich result of a trajectory optimization.
+
+    Returned when ``trajectory(result_object=True)``."""
 
     df: pd.DataFrame
     success: bool

@@ -5,12 +5,12 @@ from typing import Any, Optional, Union
 
 import casadi as ca
 import xarray as xr
+from openap import aero
 from sklearn.linear_model import Ridge
 from sklearn.preprocessing import PolynomialFeatures
 
 import numpy as np
 import pandas as pd
-from openap import aero
 
 # Type alias for CasADi symbolic/numeric types accepted by PolyWind.
 Symbolic = Union[ca.SX, ca.MX, ca.DM]
@@ -108,7 +108,9 @@ class PolyWind:
         h: float | Symbolic,
         ts: float | Symbolic,
     ) -> np.ndarray | list[Symbolic]:
-        """Build feature row. Polymorphic: numeric → np.ndarray; CasADi → list of SX/MX."""
+        """Build feature row.
+
+        Polymorphic: numeric → np.ndarray; CasADi → list of SX/MX."""
         if isinstance(x, (ca.SX, ca.MX, ca.DM)):
             powers = self._poly.powers_  # (n_features, 4)
             feats = []

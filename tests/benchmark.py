@@ -19,7 +19,7 @@ import json
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -112,7 +112,7 @@ def _run_standard_case(label, factory, objective, **traj_kwargs):
             "fuel": round(float(df.mass.iloc[0] - df.mass.iloc[-1]), 2),
             "time": round(float(df.ts.iloc[-1]), 1),
             "alt_max": round(float(df.altitude.max()), 0),
-            "n_points": int(len(df)),
+            "n_points": len(df),
         }
     except Exception as e:
         return {
@@ -145,7 +145,7 @@ def run_benchmarks():
         sha = "unknown"
 
     results["metadata"] = {
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "date": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
         "git_sha": sha,
         "python": platform.python_version(),
         "casadi": ca.__version__,
@@ -208,9 +208,10 @@ def _run_grid_cost_cases(contrail_nc, top):
     """Run contrail+CO2 grid cost benchmarks."""
     import openap
     import openap.casadi as oc
-    import pandas as pd
     import xarray as xr
     from scipy.ndimage import gaussian_filter
+
+    import pandas as pd
 
     ds = xr.open_dataset(str(contrail_nc)).sel(time="2015-12-18")
     level_pressure = [

@@ -4,15 +4,15 @@ from math import pi
 from typing import TYPE_CHECKING, Any, Callable
 
 import casadi as ca
-
-import numpy as np
 import openap.casadi as oc
-import pandas as pd
 from openap.aero import fpm, ft, kts
 
+import numpy as np
+import pandas as pd
+
+from ._types import LatLon
 from .base import Base
 from .cruise import Cruise
-from ._types import LatLon
 
 if TYPE_CHECKING:
     from ._options import TrajectoryResult
@@ -73,7 +73,6 @@ class Climb(Base):
 
         # Convert lat/lon to Cartesian coordinates.
         xp_0, yp_0 = self.proj(self.lon1, self.lat1)
-        xp_f, yp_f = self.proj(self.lon2, self.lat2)
         x_min, x_max, y_min, y_max = self._compute_bbox()
         od_psi = self._compute_bearing_psi()
 

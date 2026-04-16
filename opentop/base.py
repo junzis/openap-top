@@ -4,11 +4,11 @@ import warnings
 from typing import TYPE_CHECKING, Any, Callable, ClassVar
 
 import casadi as ca
+import openap
 import openap.casadi as oc
 from openap.aero import fpm, ft, kts
 
 import numpy as np
-import openap
 import pandas as pd
 
 try:
@@ -60,9 +60,11 @@ class Base:
         Args:
             actype (str): ICAO aircraft type code
             origin (str | LatLon): ICAO or IATA code of airport, or tuple (lat, lon)
-            destination (str | LatLon): ICAO or IATA code of airport, or tuple (lat, lon)
+            destination (str | LatLon): ICAO or IATA code of airport, or tuple
+                (lat, lon)
             m0 (float, optional): Takeoff mass factor. Defaults to 0.85 (of MTOW).
-            engine (str | None, optional): Engine type. Defaults to aircraft's default engine.
+            engine (str | None, optional): Engine type. Defaults to aircraft's default
+                engine.
             use_synonym (bool, optional): Use aircraft type synonym. Defaults to False.
             dT (float, optional): Temperature shift from standard ISA. Default = 0.
         """
@@ -129,7 +131,7 @@ class Base:
 
     @property
     def solver(self):
-        """Deprecated: use `optimizer.stats` or `optimizer.success`. Will be removed in v2.3."""
+        """Deprecated: use ``optimizer.stats`` or ``optimizer.success``."""
         warnings.warn(
             "optimizer.solver is deprecated; use optimizer.stats or optimizer.success. "
             "Will be removed in v2.3.",
@@ -143,7 +145,8 @@ class Base:
         """Solver stats dict from the most recent solve."""
         if self._last_solution is None:
             raise RuntimeError(
-                "No solver stats available — call trajectory() or multi_start_trajectory() first."
+                "No solver stats available — call trajectory() or"
+                " multi_start_trajectory() first."
             )
         return self._last_solution.stats()
 
@@ -152,7 +155,8 @@ class Base:
         """Whether the most recent solve succeeded."""
         if self._last_solution is None:
             raise RuntimeError(
-                "No solver result available — call trajectory() or multi_start_trajectory() first."
+                "No solver result available — call trajectory() or"
+                " multi_start_trajectory() first."
             )
         return bool(self._last_solution.stats()["success"])
 
@@ -559,8 +563,8 @@ class Base:
         Returns:
             tuple: (co2, h2o, sox, soot, nox) emission rates.
         """
-        xp, yp, h, m = x[0], x[1], x[2], x[3]
-        mach, vs, psi = u[0], u[1], u[2]
+        _, _, h, m = x[0], x[1], x[2], x[3]
+        mach, vs, _ = u[0], u[1], u[2]
 
         if symbolic:
             fuelflow = self.fuelflow

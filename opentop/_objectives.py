@@ -13,7 +13,7 @@ solver option instead of mutating ``solver_options`` as a side effect.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Union
+from typing import Any, Callable
 
 import casadi as ca
 import openap
@@ -53,8 +53,8 @@ def obj_fuel(
     builds a numpy ``openap.FuelFlow`` from actype/engtype so callers can
     evaluate the objective on solved numeric trajectories.
     """
-    xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]  # type: ignore[index]  # Symbolic includes float but x is always array-like
-    mach, vs, psi = u[0], u[1], u[2]  # type: ignore[index]
+    _, _, h, m, _ = x[0], x[1], x[2], x[3], x[4]  # type: ignore[index]  # Symbolic includes float but x is always array-like
+    mach, vs, _ = u[0], u[1], u[2]  # type: ignore[index]
 
     if symbolic:
         ff_model = fuelflow
@@ -170,7 +170,7 @@ def _obj_grid_cost_impl(
         n_dim: Input dimension, 3 (lon,lat,h) or 4 (+ts). Default 3.
         time_dependent: Multiply cost by dt. Default True.
     """
-    xp, yp, h, m, ts = x[0], x[1], x[2], x[3], x[4]  # type: ignore[index]  # Symbolic includes float but x is always array-like
+    xp, yp, h, _, ts = x[0], x[1], x[2], x[3], x[4]  # type: ignore[index]  # Symbolic includes float but x is always array-like
 
     interpolant: Callable[..., Any] | None = kwargs.get("interpolant", None)  # type: ignore[assignment]
     symbolic = kwargs.get("symbolic", True)

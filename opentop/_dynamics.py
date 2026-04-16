@@ -9,9 +9,10 @@ from __future__ import annotations
 from typing import Any
 
 import casadi as ca
-import numpy as np
 import openap.casadi as oc
 from openap.aero import fpm, ft, kts
+
+import numpy as np
 
 from ._types import Symbolic
 
@@ -35,9 +36,10 @@ def collocation_coeff(polydeg: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]
     # B[j] = integral of Lagrange polynomial j from 0 to 1
     B = np.zeros(polydeg + 1)
 
-    # For each collocation point, construct Lagrange polynomial and calculate coefficients
+    # For each collocation point, construct Lagrange polynomial and calculate
+    # integration coefficients.
     for j in range(polydeg + 1):
-        # Construct Lagrange polynomial that is 1 at tau_root[j] and 0 at tau_root[r] where r != j
+        # Construct Lagrange polynomial: 1 at tau_root[j], 0 at tau_root[r] for r != j
         p = np.poly1d([1])
         for r in range(polydeg + 1):
             if r != j:
