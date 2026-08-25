@@ -76,6 +76,88 @@ def test_multi_aircraft_respects_explicit_exact_hessian():
     assert multi._solver_options()["ipopt.hessian_approximation"] == "exact"
 
 
+def _straight_initial_guess(optimizer: top.Cruise) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "longitude": np.linspace(optimizer.lon1, optimizer.lon2, 5),
+            "latitude": np.linspace(optimizer.lat1, optimizer.lat2, 5),
+            "altitude": np.full(5, 35_000.0),
+        }
+    )
+
+
+def test_combined_resolution_breaks_symmetry_laterally():
+    optimizers = [_small_cruise(), _small_cruise()]
+    multi = top.MultiAircraft(
+        [
+            top.FlightSpec(f"AC{index}", optimizer)
+            for index, optimizer in enumerate(optimizers)
+        ]
+    )
+    source = _straight_initial_guess(optimizers[0])
+
+    guesses = multi._symmetry_breaking_guesses(
+        {0: source, 1: source}, {(0, 1): {100.0}}
+    )
+
+    for guess in guesses.values():
+        np.testing.assert_allclose(guess.altitude, source.altitude)
+    assert not np.allclose(guesses[0].latitude.iloc[1:-1], source.latitude.iloc[1:-1])
+    assert not np.allclose(guesses[1].latitude.iloc[1:-1], source.latitude.iloc[1:-1])
+
+
+def test_opposite_routes_receive_opposite_global_lateral_bows():
+    forward = _small_cruise("EHAM", "EDDF")
+    reverse = _small_cruise("EDDF", "EHAM")
+    multi = top.MultiAircraft(
+        [top.FlightSpec("forward", forward), top.FlightSpec("reverse", reverse)]
+    )
+    sources = {
+        0: _straight_initial_guess(forward),
+        1: _straight_initial_guess(reverse),
+    }
+
+    guesses = multi._symmetry_breaking_guesses(sources, {(0, 1): {100.0}})
+
+    forward_midpoint = forward.proj(
+        guesses[0].longitude.iloc[2], guesses[0].latitude.iloc[2]
+    )
+    reverse_midpoint = forward.proj(
+        guesses[1].longitude.iloc[2], guesses[1].latitude.iloc[2]
+    )
+    midpoint_distance = np.hypot(
+        float(forward_midpoint[0] - reverse_midpoint[0]),
+        float(forward_midpoint[1] - reverse_midpoint[1]),
+    )
+    assert midpoint_distance == pytest.approx(1_000.0, rel=1e-4)
+
+
+def test_track_fixed_resolution_breaks_symmetry_vertically():
+    optimizers = [_small_cruise(), _small_cruise()]
+    for optimizer in optimizers:
+        optimizer.fix_track_angle()
+    multi = top.MultiAircraft(
+        [
+            top.FlightSpec(f"AC{index}", optimizer)
+            for index, optimizer in enumerate(optimizers)
+        ]
+    )
+    source = _straight_initial_guess(optimizers[0])
+
+    guesses = multi._symmetry_breaking_guesses(
+        {0: source, 1: source}, {(0, 1): {100.0}}
+    )
+
+    for guess in guesses.values():
+        np.testing.assert_allclose(guess.longitude, source.longitude)
+        np.testing.assert_allclose(guess.latitude, source.latitude)
+        np.testing.assert_allclose(
+            guess.altitude.iloc[[0, -1]], source.altitude.iloc[[0, -1]]
+        )
+    assert not np.allclose(guesses[0].altitude.iloc[1:-1], source.altitude.iloc[1:-1])
+    assert not np.allclose(guesses[1].altitude.iloc[1:-1], source.altitude.iloc[1:-1])
+
+
 def test_common_altitude_requires_fixed_cruise_altitude():
     with pytest.raises(ValueError, match="fix_cruise_altitude"):
         top.MultiAircraft(

@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from math import atan2, cos, degrees, isfinite, radians, sin, sqrt
 from types import MappingProxyType
-from typing import Any
+from typing import Any, cast
 
 import casadi as ca
 
@@ -121,6 +121,18 @@ def _fleet_projection(flights: tuple[FlightSpec, ...], center: tuple[float, floa
     finally:
         for optimizer, value in previous:
             optimizer._projection_center = value
+
+
+def _canonical_route_sign(trajectory: pd.DataFrame, proj: Any) -> float:
+    """Orient a route consistently when choosing a lateral warm-start side."""
+    xp, yp = proj(
+        trajectory.longitude.iloc[[0, -1]].to_numpy(dtype=float),
+        trajectory.latitude.iloc[[0, -1]].to_numpy(dtype=float),
+    )
+    dx = float(np.asarray(xp)[-1] - np.asarray(xp)[0])
+    dy = float(np.asarray(yp)[-1] - np.asarray(yp)[0])
+    dominant = dx if abs(dx) >= abs(dy) else dy
+    return -1.0 if dominant < 0.0 else 1.0
 
 
 class MultiAircraft:
@@ -291,7 +303,12 @@ class MultiAircraft:
                     initial_guess=flight.initial_guess,
                     **options,
                 )
-            if not isinstance(df, pd.DataFrame) or df.empty:
+            if not isinstance(df, pd.DataFrame):
+                raise RuntimeError(
+                    f"independent warm-start solve failed for {flight.id}"
+                )
+            df = cast(pd.DataFrame, df)
+            if df.empty:
                 raise RuntimeError(
                     f"independent warm-start solve failed for {flight.id}"
                 )
@@ -356,19 +373,28 @@ class MultiAircraft:
                 guesses[index] = source
                 continue
             offset = index - midpoint
-            if getattr(flight.optimizer, "fix_alt", False):
+            fix_alt = getattr(flight.optimizer, "fix_alt", False)
+            fix_track = getattr(flight.optimizer, "fix_track", False)
+            if fix_alt or not fix_track:
+                # Prefer a lateral symmetry break whenever lateral resolution
+                # is available.  A vertical stagger can put an altitude-free
+                # problem deep inside the feasible region because the
+                # separation metric raises vertical distance to a high power,
+                # which in turn can trap IPOPT in an over-separated local
+                # solution.  The small lateral bow remains inside the conflict
+                # region while providing a non-zero separation gradient.
                 guesses[index] = _perturb_guess(
                     source,
-                    lateral_km=offset,
+                    lateral_km=offset
+                    * _canonical_route_sign(source, flight.optimizer.proj),
                     altitude_ft=0.0,
                     proj=flight.optimizer.proj,
                 )
             else:
                 guess = source.copy()
                 # Taper the vertical stagger to preserve both fixed endpoint
-                # altitudes. Adjacent warm starts differ by up to 2,000 ft,
-                # placing their shared-route interiors outside the nominal
-                # 1,000 ft vertical conflict scale.
+                # altitudes. This branch is reserved for track-fixed problems,
+                # where lateral symmetry breaking is unavailable.
                 progress = np.linspace(0.0, 1.0, len(source))
                 guess["altitude"] = source.altitude + (
                     2_000.0 * offset * np.sin(np.pi * progress)
