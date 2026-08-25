@@ -4,6 +4,8 @@ Pins the Cruise.enable_wind → PolyWind → xdot wind branch. Uses a synthetic
 constant-tailwind field so the solver's behaviour is predictable.
 """
 
+from typing import cast
+
 import pytest
 
 import numpy as np
@@ -38,7 +40,7 @@ def test_cruise_with_constant_tailwind_converges(constant_tailwind_df):
     opt = top.Cruise("A320", (52.308, 4.764), (50.033, 8.570), m0=0.85)
     opt.setup(max_iter=500)
     opt.enable_wind(constant_tailwind_df)
-    df = opt.trajectory(objective="fuel")
+    df = cast(pd.DataFrame, opt.trajectory(objective="fuel"))
 
     assert df is not None, "trajectory returned None"
     assert opt.success, f"solver failed: {opt.stats}"

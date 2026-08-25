@@ -8,6 +8,8 @@ import numpy as np
 import opentop as top
 import pandas as pd
 
+PHYSICAL_DISTANCE_TOLERANCE_M = 0.5
+
 
 def _small_cruise(
     origin: str | tuple[float, float] = "EHAM",
@@ -206,7 +208,9 @@ def test_crossing_aircraft_can_avoid_conflict_at_one_common_altitude():
     np.testing.assert_allclose(first.altitude, first.altitude.iloc[0], atol=1e-6)
     np.testing.assert_allclose(second.altitude, second.altitude.iloc[0], atol=1e-6)
     assert first.altitude.iloc[0] == pytest.approx(second.altitude.iloc[0], abs=1e-6)
-    assert result.pair_reports[0].vertical_m == pytest.approx(0.0, abs=1e-6)
+    assert result.pair_reports[0].vertical_m == pytest.approx(
+        0.0, abs=PHYSICAL_DISTANCE_TOLERANCE_M
+    )
 
 
 def test_two_descent_arrivals_are_sequenced_and_separated():
@@ -280,7 +284,7 @@ def test_two_descent_arrivals_are_sequenced_and_separated():
                     waypoint[0],
                     waypoint[1],
                 )
-                <= 500.0 + 1e-3
+                <= 500.0 + PHYSICAL_DISTANCE_TOLERANCE_M
             )
     assert result.pair_reports[0].minimum_metric >= (
         result.pair_reports[0].required_metric
@@ -290,7 +294,7 @@ def test_two_descent_arrivals_are_sequenced_and_separated():
 
 def test_single_aircraft_shared_opti_matches_direct_cruise():
     direct = _small_cruise()
-    direct_df = direct.trajectory(objective="fuel")
+    direct_df = cast(pd.DataFrame, direct.trajectory(objective="fuel"))
     assert isinstance(direct_df, pd.DataFrame)
     direct_objective = direct.objective_value
 

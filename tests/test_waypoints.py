@@ -1,6 +1,7 @@
 """Tests for waypoint-constrained trajectories."""
 
 from math import pi
+from typing import cast
 
 import openap
 import pytest
@@ -26,10 +27,13 @@ def test_cruise_waypoint_solution_passes_near_waypoint(aircraft_type, short_flig
     )
     waypoint = _midpoint_waypoint(opt)
 
-    df = opt.trajectory(
-        objective="fuel",
-        waypoints=[waypoint],
-        waypoint_tolerance_m=10_000,
+    df = cast(
+        pd.DataFrame,
+        opt.trajectory(
+            objective="fuel",
+            waypoints=[waypoint],
+            waypoint_tolerance_m=10_000,
+        ),
     )
     assert isinstance(df, pd.DataFrame)
 

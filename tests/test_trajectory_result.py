@@ -5,6 +5,7 @@ API and the opt-in TrajectoryResult return.
 """
 
 import math
+from typing import cast
 
 import pytest
 
@@ -21,7 +22,7 @@ def _fast_cruise():
 
 def test_trajectory_returns_dataframe_by_default():
     opt = _fast_cruise()
-    df = opt.trajectory(objective="fuel")
+    df = cast(pd.DataFrame, opt.trajectory(objective="fuel"))
     assert isinstance(df, pd.DataFrame)
     assert len(df) > 0
 
@@ -78,7 +79,7 @@ def test_result_object_df_matches_default_return():
     # Same route + settings + deterministic solver → same objective.
     # (Column-wise equality is risky due to ~1e-15 solver noise across runs.)
     assert opt1.objective_value is not None
-    assert abs(float(opt1.objective_value) - r.objective) < 1e-6
+    assert r.objective == pytest.approx(float(opt1.objective_value), rel=1e-6)
     # Row count should match exactly.
     assert len(df_direct) == len(r.df)  # type: ignore[arg-type]  # trajectory() without result_object always returns DataFrame
 
