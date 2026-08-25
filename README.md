@@ -403,4 +403,4 @@ See the [changelog](https://github.com/junzis/opentop/releases) for details.
 
 ## License
 
-GNU LGPL v3
+MIT License. See [LICENSE](LICENSE) for details.
